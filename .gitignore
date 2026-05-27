@@ -1,0 +1,10 @@
+.env
+ngrok.exe
+group_id.txt
+__pycache__/
+*.pyc
+.pytest_cache/
+.vscode/
+venv/
+.idea/
+
