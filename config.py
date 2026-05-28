@@ -76,6 +76,11 @@ ENABLE_TICKETDIVE_SCRAPING = os.getenv("ENABLE_TICKETDIVE_SCRAPING", "True").low
 # Nitter RSS base url
 NITTER_BASE_URL = os.getenv("NITTER_BASE_URL", "https://nitter.poast.org").rstrip("/")
 
+# Googleカレンダー & Web検索 API 設定
+GOOGLE_CALENDAR_ID = os.getenv("GOOGLE_CALENDAR_ID", "")
+GOOGLE_SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "")
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
+
 def validate_config():
     """設定の入力状況を確認"""
     missing = []

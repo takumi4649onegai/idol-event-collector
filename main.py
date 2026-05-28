@@ -116,6 +116,11 @@ def run_marked_idols_collection() -> tuple:
             
             if is_new:
                 print(f"🆕 本命マーク新着検知: {ev['title']} ({ev['date']})")
+                
+                # Googleカレンダーへの無言自動同期フックの実行
+                from calendar_client import add_to_google_calendar
+                add_to_google_calendar(ev)
+                
                 # 自動プッシュ通知は行わない（手動クエリのみのためコメントアウト）
                 # line_client.send_line_push_notification(ev)
                 new_notified += 1

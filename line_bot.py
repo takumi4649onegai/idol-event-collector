@@ -141,6 +141,56 @@ def send_reply(reply_token: str, reply_text: str):
     except Exception as e:
         print(f"🚨 LINE返信中に例外が発生しました: {str(e)}")
 
+def search_web_free_lives(area: str, date_str: str) -> list:
+    """
+    Tavily Web Search APIを使用して、指定された地域と日付で開催されるフリーライブ・インストアライブ・リリイベをリアルタイム検索する。
+    """
+    if not config.TAVILY_API_KEY:
+        print("⚠️ Tavily API Key が未設定のため、Web検索をスキップします（プレースホルダー動作）。")
+        return []
+    
+    # 検索用クエリの作成 (例: "2026-05-30 新潟 アイドル フリーライブ リリイベ インストア")
+    query = f"{date_str} {area} アイドル フリーライブ リリイベ インストア"
+    url = "https://api.tavily.com/search"
+    payload = {
+        "api_key": config.TAVILY_API_KEY,
+        "query": query,
+        "search_depth": "advanced",
+        "include_answer": False,
+        "max_results": 5
+    }
+    
+    found_events = []
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        if response.status_code == 200:
+            results = response.json().get("results", [])
+            for res in results:
+                title = res.get("title", "")
+                link = res.get("url", "")
+                snippet = res.get("content", "")
+                
+                if not title or not link:
+                    continue
+                
+                # タイトルを少し綺麗に整形し、Web検索由来であることがわかるようにマーク
+                clean_title = f"【Web検索】{title.strip()}"
+                
+                found_events.append({
+                    "url": link,
+                    "title": clean_title,
+                    "date": date_str,  # 指定された日付
+                    "area": area,
+                    "performers": "街のフリーライブ/リリイベ",
+                    "raw_text": snippet
+                })
+        else:
+            print(f"❌ Tavily API エラー: HTTP {response.status_code}")
+    except Exception as e:
+        print(f"🚨 Tavily Web検索中に例外が発生しました: {str(e)}")
+        
+    return found_events
+
 @app.route("/callback", methods=["POST"])
 def callback():
     """LINEのWebhookコールバック受付"""
@@ -199,16 +249,27 @@ def callback():
                 # データベースから条件に合うイベントを検索
                 db_results = query_events(date_str=target_date, area_str=target_area, keyword=target_keyword)
                 
+                # その場でのWeb検索の融合 (地域名と日付が判定されている場合、イオンやタワレコ等のフリーライブを拾うためにリアルタイム検索)
+                web_results = []
+                if target_area and target_date:
+                    web_results = search_web_free_lives(area=target_area, date_str=target_date)
+                
+                # データのマージ (SQLite DBの結果 + Web検索の結果)
+                merged_results = db_results + web_results
+                
                 # 返信メッセージの組み立て
                 header_date = target_date if target_date else "いつでも"
                 header_area = target_area if target_area else "全地域"
                 header_kw = f" 🔑【{target_keyword}】" if target_keyword else ""
                 
-                if db_results:
+                if merged_results:
+                    # 時間軸の早い順（開催日の昇順）で並び替え
+                    merged_results.sort(key=lambda x: x.get("date", "9999-12-31"))
+                    
                     # 1. 表示件数の制限 (画面が埋まらないように最大15件)
                     max_display = 15
-                    display_results = db_results[:max_display]
-                    remaining_count = len(db_results) - max_display
+                    display_results = merged_results[:max_display]
+                    remaining_count = len(merged_results) - max_display
                     
                     # 2. フラットなリスト形式の組み立て (何月何日 | イベント名 🔗 URL)
                     event_list_text = []
@@ -242,7 +303,7 @@ def callback():
                     
                     reply_text = (
                         f"📅【{header_date}】 📍【{header_area}】{header_kw}\n"
-                        f"新着順イベント情報 (全 {len(db_results)} 件)\n"
+                        f"開催順イベント情報 (全 {len(merged_results)} 件)\n"
                         f"────────────────────\n\n"
                         f"{events_joined}\n\n"
                         f"────────────────────\n"
@@ -254,7 +315,7 @@ def callback():
                     reply_text = (
                         f"📅【{header_date}】 📍【{header_area}】{header_kw}\n"
                         f"のアイドルイベントは見つかりませんでした😢\n\n"
-                        f"新しくチケットサイトに登録されたら、自動的に検索してお答えします！"
+                        f"新しくチケットサイトに登録されるか、Web情報が見つかり次第お知らせします！"
                     )
                 
                 send_reply(reply_token, reply_text)
