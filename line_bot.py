@@ -267,10 +267,14 @@ def callback():
 if __name__ == "__main__":
     import sys
     import io
-    # Windowsコンソールでのcp932エラー回避
+    # Windowsコンソールでのcp932エラー回避 (リアルタイム出力)
     if sys.platform.startswith('win'):
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+        try:
+            sys.stdout.reconfigure(encoding='utf-8')
+            sys.stderr.reconfigure(encoding='utf-8')
+        except AttributeError:
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', write_through=True)
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', write_through=True)
         
     print(f"🔌 LINE Webhook サーバーをポート {config.PORT} で起動します...")
     app.run(host="0.0.0.0", port=config.PORT, debug=False)

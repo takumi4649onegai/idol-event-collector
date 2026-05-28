@@ -2,10 +2,15 @@ import time
 import sys
 import io
 
-# Windowsコンソールでの絵文字表示による UnicodeEncodeError (cp932) 回避用
+# Windowsコンソールでの絵文字表示による UnicodeEncodeError (cp932) 回避用 (リアルタイム出力)
 if sys.platform.startswith('win'):
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except AttributeError:
+        # 古いPython環境向けのフォールバック (バッファ自動フラッシュ有効)
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', write_through=True)
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', write_through=True)
 
 import config
 import db_manager
@@ -99,6 +104,13 @@ def run_marked_idols_collection() -> tuple:
                 
         # データベース保存 ＆ 新着プッシュ通知
         for ev in unique_idol_events:
+            # 過去（今日より前）のイベントはデータベースに保存しない
+            from datetime import datetime
+            today_str = datetime.today().strftime("%Y-%m-%d")
+            if ev.get("date", "") < today_str:
+                print(f"⏭️ 過去イベント（保存スキップ）: {ev['title']} ({ev['date']})")
+                continue
+                
             # データベースへの保存を試みる
             is_new = db_manager.insert_event(ev)
             
@@ -171,6 +183,12 @@ def run_general_keywords_collection() -> tuple:
                 
         # データベース保存 (LINE Notify 通知は行わない)
         for ev in unique_gen_events:
+            # 過去（今日より前）のイベントはデータベースに保存しない
+            from datetime import datetime
+            today_str = datetime.today().strftime("%Y-%m-%d")
+            if ev.get("date", "") < today_str:
+                continue
+                
             # 検索キーワードが performers に入っているので、少し分かりやすく整形
             ev["performers"] = f"合同/イベント ({kw})"
             

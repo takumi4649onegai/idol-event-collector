@@ -13,12 +13,31 @@ load_dotenv()
 MARKING_IDOLS = [
     {
         "name": "東京CuteCute",
-        "search_queries": ["東京Cute"],
+        "search_queries": [
+            "東京CuteCute",
+            "東京Cute",
+            "西萌葉", "西 萌葉",
+            "小見山沙空", "小見山 沙空",
+            "白瀬みれい", "白瀬 みれい",
+            "桃宮唯花", "桃宮 唯花",
+            "柴田理名", "柴田 理名",
+            "桜ゆな", "桜 ゆな",
+            "柚谷双葉", "柚谷 双葉",
+            "有栖れる", "有栖 れる"
+        ],
         "x_id": "TOKYO_Cute2"
     },
     {
         "name": "Red radiance",
-        "search_queries": ["Red radiance", "Redradiance"],
+        "search_queries": [
+            "Red radiance",
+            "Redradiance",
+            "神城朱里", "神城 朱里",
+            "恋水凛", "恋水 凛",
+            "Chara", "ちゃら",
+            "星宮ほのか", "星宮 ほのか",
+            "茉音華", "まおか"
+        ],
         "x_id": "gce_rr"
     }
 ]
