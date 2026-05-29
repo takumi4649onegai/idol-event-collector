@@ -124,13 +124,17 @@ def fetch_tweets_via_rss(username: str) -> list:
             if not is_event:
                 continue # イベント関連ではないと判断したものはスキップ
                 
-            # 日付のパース
-            try:
-                dt = parsedate_to_datetime(pub_date_str)
-                event_date = dt.strftime("%Y-%m-%d")
-            except Exception:
-                # パースできない場合はテキストから日付を探すか、今日にする
-                event_date = parse_date(tweet_text)
+            # 日付のパース: まずツイート本文から「M月D日」や「M/D」等のイベント開催日を探す
+            event_date = parse_date(tweet_text)
+            
+            # ツイート本文から日付が見つからなかった（今日の年月日が返ってきた）場合は、投稿日時（pubDate）をフォールバックにする
+            today_str = datetime.today().strftime("%Y-%m-%d")
+            if event_date == today_str:
+                try:
+                    dt = parsedate_to_datetime(pub_date_str)
+                    event_date = dt.strftime("%Y-%m-%d")
+                except Exception:
+                    pass
                 
             # エリア判定 (本文やタイトルから抽出)
             area = determine_area(tweet_text)
