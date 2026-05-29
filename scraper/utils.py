@@ -36,37 +36,50 @@ def determine_area(text: str) -> str:
 def parse_date(date_str: str) -> str:
     """
     様々な日付表記を YYYY-MM-DD 形式に統一する。
-    例: '2026年5月27日' -> '2026-05-27'
-        '2026/05/27' -> '2026-05-27'
-        '5/27(水)' -> 今年('2026')を補完して '2026-05-27'
+    郵便番号（150-0043）、時間（19:35-19:55）、番地（5-51-12）等に対する
+    誤検知（月日が範囲外になるマッチ）を防ぐため、日本語表記を優先し、月日の妥当性を厳密に検証します。
     """
     if not date_str:
         return datetime.today().strftime("%Y-%m-%d")
     
     # 余分な空白や改行をクリーンアップ
     date_clean = re.sub(r'\s+', '', date_str)
-    
     current_year = datetime.today().year
     
-    # パターン1: YYYY-MM-DD
-    match = re.search(r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})', date_clean)
-    if match:
-        return f"{match.group(1)}-{int(match.group(2)):02d}-{int(match.group(3)):02d}"
+    # --- 最優先: 日本語表記パターン (誤マッチが極めて少ないため) ---
     
-    # パターン2: MM-DD または MM/DD (例: 05/27, 5/27)
-    match = re.search(r'(\d{1,2})[-/](\d{1,2})', date_clean)
-    if match:
-        return f"{current_year}-{int(match.group(1)):02d}-{int(match.group(2)):02d}"
-    
-    # パターン3: YYYY年MM月DD日
+    # パターン1: YYYY年MM月DD日
     match = re.search(r'(\d{4})年(\d{1,2})月(\d{1,2})日', date_clean)
     if match:
-        return f"{match.group(1)}-{int(match.group(2)):02d}-{int(match.group(3)):02d}"
+        y, m, d = int(match.group(1)), int(match.group(2)), int(match.group(3))
+        if 1 <= m <= 12 and 1 <= d <= 31:
+            return f"{y}-{m:02d}-{d:02d}"
     
-    # パターン4: MM月DD日
+    # パターン2: MM月DD日
     match = re.search(r'(\d{1,2})月(\d{1,2})日', date_clean)
     if match:
-        return f"{current_year}-{int(match.group(1)):02d}-{int(match.group(2)):02d}"
+        m, d = int(match.group(1)), int(match.group(2))
+        if 1 <= m <= 12 and 1 <= d <= 31:
+            return f"{current_year}-{m:02d}-{d:02d}"
+            
+    # --- 次点: スラッシュ・ハイフン表記パターン (範囲チェック付きで郵便番号や時間範囲を完全排除) ---
+    
+    # パターン3: YYYY-MM-DD
+    # findall でマッチを全列挙し、有効な最初の日付を採用（郵便番号などの部分ノイズを迂回するため）
+    matches = re.findall(r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})', date_clean)
+    for y_str, m_str, d_str in matches:
+        y, m, d = int(y_str), int(m_str), int(d_str)
+        if 1 <= m <= 12 and 1 <= d <= 31:
+            return f"{y}-{m:02d}-{d:02d}"
+            
+    # パターン4: MM-DD または MM/DD (例: 05/27, 5/27)
+    # タイムスケジュール 19:35-19:55 等に含まれる部分文字列（35-19 等）や郵便番号（50-00 等）を回避するため、
+    # 有効な月日（1-12月、1-31日）に合致する最初の組み合わせのみを厳密に探す
+    matches = re.findall(r'(\d{1,2})[-/](\d{1,2})', date_clean)
+    for m_str, d_str in matches:
+        m, d = int(m_str), int(d_str)
+        if 1 <= m <= 12 and 1 <= d <= 31:
+            return f"{current_year}-{m:02d}-{d:02d}"
     
     # フォールバック: パースできなかった場合は今日の年月日を返す
     try:
