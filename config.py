@@ -1,5 +1,6 @@
 import os
 from dotenv import load_dotenv
+import json
 
 # .env ファイルの読み込み (ローカル開発用)
 load_dotenv()
@@ -10,7 +11,7 @@ load_dotenv()
 # アイドル名とXのユーザーIDを定義します。
 # 新しく追跡したいグループがあれば、この配列に要素を追加するだけでOKです！
 # 公式Xのタイムラインとチケットサイトを優先監視し、新着は即座にプッシュ通知されます。
-MARKING_IDOLS = [
+BASE_MARKING_IDOLS = [
     {
         "name": "東京CuteCute",
         "search_queries": [
@@ -41,6 +42,55 @@ MARKING_IDOLS = [
         "x_id": "gce_rr"
     }
 ]
+
+def load_marking_idols():
+    idols = list(BASE_MARKING_IDOLS)
+    if os.path.exists("custom_idols.json"):
+        try:
+            with open("custom_idols.json", "r", encoding="utf-8") as f:
+                custom = json.load(f)
+                idols.extend(custom)
+        except Exception as e:
+            print(f"Error loading custom_idols.json: {e}")
+    return idols
+
+MARKING_IDOLS = load_marking_idols()
+
+def add_custom_idol(name: str) -> bool:
+    """LINEのコマンド等から動的にマークアイドルを追加する"""
+    custom = []
+    if os.path.exists("custom_idols.json"):
+        try:
+            with open("custom_idols.json", "r", encoding="utf-8") as f:
+                custom = json.load(f)
+        except Exception:
+            pass
+            
+    # 重複チェック (大文字小文字無視、スペース無視)
+    name_clean = name.replace(" ", "").lower()
+    existing_names = [idol["name"].replace(" ", "").lower() for idol in BASE_MARKING_IDOLS + custom]
+    if name_clean in existing_names:
+        return False
+        
+    new_idol = {
+        "name": name,
+        "search_queries": [name],
+        "x_id": ""
+    }
+    custom.append(new_idol)
+    
+    try:
+        with open("custom_idols.json", "w", encoding="utf-8") as f:
+            json.dump(custom, f, ensure_ascii=False, indent=4)
+            
+        # メモリ上のグローバル変数を最新化
+        global MARKING_IDOLS
+        MARKING_IDOLS = load_marking_idols()
+        print(f"📁 新しいアイドル「{name}」が custom_idols.json に追加されました。")
+        return True
+    except Exception as e:
+        print(f"🚨 custom_idols.json の保存に失敗しました: {str(e)}")
+        return False
 
 # ==================================================
 # 2. エリア一般イベントの収集用検索キーワード

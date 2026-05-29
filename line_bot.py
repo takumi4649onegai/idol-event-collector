@@ -305,6 +305,27 @@ def callback():
                 reply_token = event.get("replyToken")
                 user_text = event.get("message", {}).get("text", "").strip()
                 
+                # 「追加 NGT48」や「登録 NGT48」といった命令コマンドを判定する
+                if user_text.startswith("追加") or user_text.startswith("登録"):
+                    # コマンドの後に続く対象名（グループ名等）を切り出す
+                    new_idol_name = re.sub(r'^(追加|登録)\s*', '', user_text).strip()
+                    if new_idol_name:
+                        import config
+                        is_added = config.add_custom_idol(new_idol_name)
+                        if is_added:
+                            reply_text = (
+                                f"🎉【登録完了】\n"
+                                f"新しい推しグループ「{new_idol_name}」を監視リストに追加しました！\n\n"
+                                f"次回以降の自動定期巡回時に、チケット販売サイトや公式Xなどの収集対象として自動追加されます。\n\n"
+                                f"💡今すぐ情報が見たい場合は、「{new_idol_name}」と話しかけてください！リアルタイムWeb検索から直近の予定を自動回収して返信します🌟"
+                            )
+                        else:
+                            reply_text = f"💡「{new_idol_name}」はすでに監視リストに登録されています！そのまま「{new_idol_name}」と話しかけていただければ検索可能です。"
+                    else:
+                        reply_text = "⚠️「追加 NGT48」のように、「追加」の後に半角スペースを空けてグループ名やメンバー名を入力してください。"
+                    send_reply(reply_token, reply_text)
+                    continue
+                
                 # メッセージの解析 (日付・地域・キーワードを取り出す)
                 target_date, target_area, target_keyword = parse_user_message(user_text)
                 
