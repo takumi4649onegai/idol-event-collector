@@ -43,10 +43,14 @@ def run_marked_idols_collection() -> tuple:
         
         idol_events = []
         
-        # チケットサイト用の検索クエリの決定 (search_queriesが未設定の場合はnameを使う)
-        search_words = idol.get("search_queries", [name])
+        # チケットサイト用は、メンバー名での部分一致ノイズ（Chara等）を避けるため、グループ名のみで検索します
+        ticket_search_words = [name]
+        if name == "東京CuteCute":
+            ticket_search_words = ["東京CuteCute", "東京Cute"]
+        elif name == "Red radiance":
+            ticket_search_words = ["Red radiance", "Redradiance"]
         
-        for word in search_words:
+        for word in ticket_search_words:
             # --- TIGET スクレイピング ---
             if config.ENABLE_TIGET_SCRAPING:
                 try:
