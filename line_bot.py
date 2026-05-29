@@ -191,6 +191,79 @@ def search_web_free_lives(area: str, date_str: str) -> list:
         
     return found_events
 
+def search_web_keyword(keyword: str, date_str: str = None) -> list:
+    """
+    Tavily Web Search APIを使用して、グループ名などのキーワードに関連する直近または指定日の
+    イベント・メディア出演・Xの告知情報などをリアルタイム検索する。
+    """
+    if not config.TAVILY_API_KEY:
+        return []
+        
+    query_parts = [f"\"{keyword}\""]
+    if date_str:
+        query_parts.append(date_str)
+    query_parts.append("(ライブ OR イベント OR 告知 OR 出演 OR ラジオ OR 水着)")
+    
+    query = " ".join(query_parts) + " -site:youtube.com"
+    url = "https://api.tavily.com/search"
+    payload = {
+        "api_key": config.TAVILY_API_KEY,
+        "query": query,
+        "search_depth": "advanced",
+        "include_answer": False,
+        "max_results": 5
+    }
+    
+    found_events = []
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        if response.status_code == 200:
+            results = response.json().get("results", [])
+            for res in results:
+                title = res.get("title", "")
+                link = res.get("url", "")
+                snippet = res.get("content", "")
+                
+                if not title or not link:
+                    continue
+                    
+                # スニペットやタイトルから日付を抽出
+                event_date = date_str
+                if not event_date:
+                    date_match = re.search(r'(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})', title + " " + snippet)
+                    if date_match:
+                        event_date = f"{date_match.group(1)}-{int(date_match.group(2)):02d}-{int(date_match.group(3)):02d}"
+                    else:
+                        md_match = re.search(r'(\d{1,2})月(\d{1,2})日', title + " " + snippet)
+                        if md_match:
+                            year = datetime.today().year
+                            event_date = f"{year}-{int(md_match.group(1)):02d}-{int(md_match.group(2)):02d}"
+                            
+                # 今日以降の日付、または指定日のイベントのみを採用
+                today_str = datetime.today().strftime("%Y-%m-%d")
+                target_cmp_date = date_str if date_str else today_str
+                
+                if event_date and event_date >= target_cmp_date:
+                    # タイトルのクリーンアップ
+                    clean_title = title.replace("\n", " ").replace("\r", "").strip()
+                    if len(clean_title) > 60:
+                        clean_title = clean_title[:60] + "..."
+                        
+                    found_events.append({
+                        "url": link,
+                        "title": f"【Web検索】{clean_title}",
+                        "date": event_date,
+                        "area": "東京" if "東京" in title + snippet else ("新潟" if "新潟" in title + snippet else "その他"),
+                        "performers": keyword,
+                        "raw_text": snippet
+                    })
+        else:
+            print(f"❌ Tavily API エラー: HTTP {response.status_code}")
+    except Exception as e:
+        print(f"🚨 Tavily Web検索中に例外が発生しました: {str(e)}")
+        
+    return found_events
+
 @app.route("/callback", methods=["POST"])
 def callback():
     """LINEのWebhookコールバック受付"""
@@ -249,10 +322,15 @@ def callback():
                 # データベースから条件に合うイベントを検索
                 db_results = query_events(date_str=target_date, area_str=target_area, keyword=target_keyword)
                 
-                # その場でのWeb検索の融合 (地域名と日付が判定されている場合、イオンやタワレコ等のフリーライブを拾うためにリアルタイム検索)
+                # その場でのWeb検索の融合 (日付・地域がある場合はフリーライブ検索、キーワードのみの場合はその対象のリアルタイムWeb検索)
                 web_results = []
                 if target_area and target_date:
                     web_results = search_web_free_lives(area=target_area, date_str=target_date)
+                
+                # キーワードが指定されている場合は、さらにそのグループ特有の最新X告知やWeb情報をリアルタイム補完
+                if target_keyword:
+                    web_kw_results = search_web_keyword(keyword=target_keyword, date_str=target_date)
+                    web_results.extend(web_kw_results)
                 
                 # データのマージ (SQLite DBの結果 + Web検索の結果)
                 merged_results = db_results + web_results
