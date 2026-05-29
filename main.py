@@ -112,6 +112,8 @@ def run_marked_idols_collection() -> tuple:
         for ev in idol_events:
             url = ev.get("url", "")
             if url not in seen_urls:
+                from scraper.utils import determine_performers
+                ev["performers"] = determine_performers(ev.get("raw_text", "") + " " + ev.get("title", ""), ev.get("performers", name))
                 seen_urls.add(url)
                 unique_idol_events.append(ev)
                 

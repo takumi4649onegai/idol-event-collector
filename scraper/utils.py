@@ -100,3 +100,55 @@ def clean_text(text: str) -> str:
     text = text.replace("\r", "")
     text = re.sub(r'\n{3,}', '\n\n', text) # 3つ以上の連続改行は2つにする
     return text.strip()
+
+def determine_performers(text: str, default_performers: str = "") -> str:
+    """
+    テキスト本文（ツイートや公式サイト記事）から、出演しているアイドルグループを動的に名寄せ・判定する。
+    兼任メンバー（小見山沙空、柚谷双葉）が関わる場合は、自動的に両グループを出演者として設定する。
+    """
+    if not text:
+        return default_performers
+        
+    text_clean = text.lower().replace(" ", "").replace("\n", "").replace("\r", "")
+    
+    # 兼任メンバーの検出（いずれか一人でも含まれていれば両グループ出演とみなす）
+    concurrent_members = ["小見山沙空", "小宮山さら", "柚谷双葉"]
+    has_concurrent = any(m.lower() in text_clean for m in concurrent_members)
+    
+    matched_groups = set()
+    
+    # グループ名や個々のメンバーのキーワード検出
+    import config
+    for idol in config.MARKING_IDOLS:
+        group_name = idol["name"]
+        for query in idol["search_queries"]:
+            q_clean = query.lower().replace(" ", "")
+            if q_clean in text_clean:
+                matched_groups.add(group_name)
+                break
+                
+    # 兼任メンバーが含まれている場合は、両方の本命グループを追加
+    if has_concurrent:
+        matched_groups.add("東京CuteCute")
+        matched_groups.add("Red radiance")
+        
+    if not matched_groups:
+        return default_performers
+        
+    # 元のデフォルト出演者も確実に入れる
+    if default_performers:
+        for p in default_performers.split(", "):
+            if p.strip() and p.strip() != "i":
+                matched_groups.add(p.strip())
+                
+    # MARKING_IDOLSの順番でソートして綺麗な文字列にする
+    ordered_groups = []
+    for idol in config.MARKING_IDOLS:
+        if idol["name"] in matched_groups:
+            ordered_groups.append(idol["name"])
+            
+    for g in matched_groups:
+        if g not in ordered_groups:
+            ordered_groups.append(g)
+            
+    return ", ".join(ordered_groups)
