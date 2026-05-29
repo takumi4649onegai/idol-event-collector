@@ -349,8 +349,10 @@ def callback():
                     display_results = merged_results[:max_display]
                     remaining_count = len(merged_results) - max_display
                     
-                    # 2. フラットなリスト形式の組み立て (何月何日 | イベント名 🔗 URL)
-                    event_list_text = []
+                    # 2. 分類用のリスト作成 (確定チケット販売 vs SNS/HP告知)
+                    ticket_list_text = []
+                    sns_list_text = []
+                    
                     for ev in display_results:
                         date_display = ev["date"]
                         try:
@@ -362,17 +364,36 @@ def callback():
                             pass
                             
                         # 改行や複数スペースを綺麗に整形
-                        clean_ev_title = re.sub(r'\s+', ' ', ev['title'].replace('\n', ' ').replace('\r', ' ')).strip()
-                        # チケットサイトのタグを取り除く
-                        clean_ev_title = clean_ev_title.replace("【LivePocket】", "").replace("【TIGET】", "").replace("【TicketDive】", "").strip()
+                        orig_title = ev['title']
+                        clean_ev_title = re.sub(r'\s+', ' ', orig_title.replace('\n', ' ').replace('\r', ' ')).strip()
                         
-                        url_part = f" 🔗 {ev['url']}" if ev['url'] and not ev['url'].startswith("local_id:") else ""
+                        # チケットサイトに属するか判定
+                        # 元タイトルにタグが含まれているか、またはURLが直接のチケットサイトのもの
+                        url = ev.get("url", "")
+                        is_ticket = any(k in orig_title for k in ["【LivePocket】", "【TIGET】", "【TicketDive】"]) or \
+                                    any(k in url for k in ["livepocket.jp", "tiget.net", "ticketdive.com"])
+                                    
+                        # 表示用にソースタグを取り除く
+                        clean_ev_title = clean_ev_title.replace("【LivePocket】", "").replace("【TIGET】", "").replace("【TicketDive】", "").replace("【X告知】", "").replace("【HP告知】", "").replace("【Web検索】", "").strip()
+                        
+                        url_part = f" 🔗 {url}" if url and not url.startswith("local_id:") else ""
                         perf_part = f" (👥 {ev['performers']})" if ev['performers'] and not target_keyword else ""
                         
-                        # 『何月何日 | イベント名 🔗 URL』のフラットなリスト形式
-                        event_list_text.append(f"・{date_display} | {clean_ev_title}{perf_part}{url_part}")
+                        event_line = f"・{date_display} | {clean_ev_title}{perf_part}{url_part}"
                         
-                    events_joined = "\n".join(event_list_text).strip()
+                        if is_ticket:
+                            ticket_list_text.append(event_line)
+                        else:
+                            sns_list_text.append(event_line)
+                            
+                    # カテゴリ別テキストの組み立て
+                    events_joined_parts = []
+                    if ticket_list_text:
+                        events_joined_parts.append("🎫【確定チケット販売サイト】\n" + "\n".join(ticket_list_text))
+                    if sns_list_text:
+                        events_joined_parts.append("📢【SNS告知・メディア出演情報】\n" + "\n".join(sns_list_text))
+                        
+                    events_joined = "\n\n".join(events_joined_parts).strip()
                     
                     # 他にもイベントがある場合のご案内フッター
                     footer_text = ""

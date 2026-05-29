@@ -97,7 +97,21 @@ def scrape_ticketdive_events(query: str) -> list:
         title = clean_text(title)
         area = determine_area(clean_text_val)
         
-        # TicketDiveの検索エンジンは正確なため、検証なしでそのまま採用します
+        # TicketDiveの検索結果にクエリが含まれているか厳密にチェック（偽陽性・お勧め表示対策）
+        query_clean = query.replace(" ", "").lower()
+        container_text_clean = container_text.replace(" ", "").lower()
+        title_clean = title.replace(" ", "").lower()
+        
+        if query_clean not in title_clean and query_clean not in container_text_clean:
+            # クエリがメンバー名の場合などに備え、タイトルや本文にグループ名が含まれていれば許可
+            is_group_match = False
+            for group_kw in ["東京CuteCute", "東京Cute", "Red radiance", "Redradiance"]:
+                if group_kw.replace(" ", "").lower() in title_clean or group_kw.replace(" ", "").lower() in container_text_clean:
+                    is_group_match = True
+                    break
+            
+            if not is_group_match:
+                continue
                 
         found_events.append({
             "date": event_date,
