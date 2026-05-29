@@ -112,7 +112,7 @@ def determine_performers(text: str, default_performers: str = "") -> str:
     text_clean = text.lower().replace(" ", "").replace("\n", "").replace("\r", "")
     
     # 兼任メンバーの検出（いずれか一人でも含まれていれば両グループ出演とみなす）
-    concurrent_members = ["小見山沙空", "小宮山さら", "柚谷双葉"]
+    concurrent_members = ["小見山沙空", "小宮山さら", "柚谷双葉", "西萌葉"]
     has_concurrent = any(m.lower() in text_clean for m in concurrent_members)
     
     matched_groups = set()
