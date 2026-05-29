@@ -80,6 +80,15 @@ def run_marked_idols_collection() -> tuple:
                 except Exception as e:
                     print(f"🚨 TicketDive取得中にエラー: {str(e)}")
                     
+        # --- 公式サイトスクレイピング (限定公開チケットの救済策) ---
+        if name == "東京CuteCute":
+            try:
+                from scraper.tokyocutecute_official import scrape_tokyocutecute_site
+                hp_events = scrape_tokyocutecute_site()
+                idol_events.extend(hp_events)
+            except Exception as e:
+                print(f"🚨 公式サイト取得中にエラー: {str(e)}")
+                
         # --- X RSS スクレイピング ---
         if config.ENABLE_X_SCRAPING and x_id:
             try:

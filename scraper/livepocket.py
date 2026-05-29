@@ -24,8 +24,11 @@ def scrape_livepocket_events(query: str) -> list:
         
     try:
         with sync_playwright() as p:
-            # ヘッドレスブラウザの起動
-            browser = p.chromium.launch(headless=True)
+            import os
+            # GitHub Actionsなどのクラウド環境(CI)ではheadless=True、タクミさんのPC(ローカル)ではheadless=Falseにしてアクセスブロックを完全回避！
+            is_ci = os.getenv("CI", "false").lower() == "true" or os.getenv("GITHUB_ACTIONS", "false").lower() == "true"
+            
+            browser = p.chromium.launch(headless=is_ci)
             context = browser.new_context(
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 viewport={"width": 1280, "height": 800}
@@ -33,7 +36,7 @@ def scrape_livepocket_events(query: str) -> list:
             page = context.new_page()
             
             # ページ遷移と読み込み待機
-            page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            page.goto(url, wait_until="networkidle", timeout=30000)
             
             # JSのレンダリング完了を少し待つ
             page.wait_for_timeout(3000)
@@ -99,8 +102,26 @@ def scrape_livepocket_events(query: str) -> list:
         # エリア判定
         area = determine_area(container_text)
         
-        # クエリでの検索結果をすべて信頼して採用します (生誕祭など表記の異なるイベントを漏れなく拾うため)
+        # クエリでの検索結果を信頼して採用しますが、
+        # LivePocketの「ヒットなしの際にお勧めイベントを勝手に表示する仕様」による偽陽性（誤検出）を防ぐため、
+        # タイトル、出演者情報、または本文の中に、クエリ（検索語）が本当に含まれているか厳密にチェックします。
+        query_clean = query.replace(" ", "").lower()
+        container_text_clean = container_text.replace(" ", "").lower()
+        title_clean = title.replace(" ", "").lower()
         
+        # 検索語がタイトルにも詳細テキストにも含まれていない場合は、LivePocketの偽陽性おすすめイベントとみなして完全に除外します。
+        # ※「東京Cute」などのクエリに対する誤マッチ対策
+        if query_clean not in title_clean and query_clean not in container_text_clean:
+            # ただし、クエリがメンバー名で、タイトルまたは本文に「東京CuteCute」などのグループ名が含まれている場合はメンバーのイベントであるため許可します
+            is_group_match = False
+            for group_kw in ["東京CuteCute", "東京Cute", "Red radiance", "Redradiance"]:
+                if group_kw.replace(" ", "").lower() in title_clean or group_kw.replace(" ", "").lower() in container_text_clean:
+                    is_group_match = True
+                    break
+            
+            if not is_group_match:
+                continue
+
         found_events.append({
             "date": event_date,
             "area": area,
