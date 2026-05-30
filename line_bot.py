@@ -176,10 +176,32 @@ def search_web_free_lives(area: str, date_str: str) -> list:
                 # タイトルを少し綺麗に整形し、Web検索由来であることがわかるようにマーク
                 clean_title = f"【Web検索】{title.strip()}"
                 
+                # スニペットやタイトルから日付を抽出
+                event_date = None
+                date_match = re.search(r'(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})', title + " " + snippet)
+                if date_match:
+                    event_date = f"{date_match.group(1)}-{int(date_match.group(2)):02d}-{int(date_match.group(3)):02d}"
+                else:
+                    md_match = re.search(r'(\d{1,2})月(\d{1,2})日', title + " " + snippet)
+                    if md_match:
+                        year = datetime.today().year
+                        event_date = f"{year}-{int(md_match.group(1)):02d}-{int(md_match.group(2)):02d}"
+                    else:
+                        slash_match = re.search(r'(\d{1,2})/(\d{1,2})', title + " " + snippet)
+                        if slash_match:
+                            year = datetime.today().year
+                            event_date = f"{year}-{int(slash_match.group(1)):02d}-{int(slash_match.group(2)):02d}"
+
+                if not event_date:
+                    if re.match(r'^\d{4}-\d{2}-\d{2}$', date_str):
+                        event_date = date_str
+                    else:
+                        event_date = datetime.today().strftime("%Y-%m-%d")
+
                 found_events.append({
                     "url": link,
                     "title": clean_title,
-                    "date": date_str,  # 指定された日付
+                    "date": event_date,
                     "area": area,
                     "performers": "街のフリーライブ/リリイベ",
                     "raw_text": snippet
