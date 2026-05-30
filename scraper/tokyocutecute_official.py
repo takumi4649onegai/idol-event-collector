@@ -7,10 +7,10 @@ import config
 
 def scrape_tokyocutecute_site() -> list:
     """
-    東京CuteCute公式サイト (https://tokyocutecute.jp) の「NEWS & SCHEDULE」から
+    東京CuteCute公式サイト (https://tokyocutecute.jp/blogs/news) の「NEWS & SCHEDULE」から
     イベント・ライブ告知情報をクロールし、 unlisted/限定公開 のチケットリンクやイベント情報を抽出する。
     """
-    url = "https://tokyocutecute.jp"
+    url = "https://tokyocutecute.jp/blogs/news"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }

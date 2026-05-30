@@ -104,16 +104,16 @@ def clean_text(text: str) -> str:
 def determine_performers(text: str, default_performers: str = "") -> str:
     """
     テキスト本文（ツイートや公式サイト記事）から、出演しているアイドルグループを動的に名寄せ・判定する。
-    兼任メンバー（小見山沙空、柚谷双葉）が関わる場合は、自動的に両グループを出演者として設定する。
+    兼任メンバー（小見山沙空、柚谷双葉、西萌葉）が関わる場合は、自動的に両グループを出演者として設定する。
+    ただし、名前が「除く」「不参加」といったキーワードと共に用いられている場合は、そのメンバーの出演をカウントしない。
     """
     if not text:
         return default_performers
         
     text_clean = text.lower().replace(" ", "").replace("\n", "").replace("\r", "")
     
-    # 兼任メンバーの検出（いずれか一人でも含まれていれば両グループ出演とみなす）
     concurrent_members = ["小見山沙空", "小宮山さら", "柚谷双葉", "西萌葉"]
-    has_concurrent = any(m.lower() in text_clean for m in concurrent_members)
+    exclude_keywords = ["除く", "不参加", "欠席", "お休み", "休演", "出演はございません", "出演なし", "出演いたしません", "出演致しません"]
     
     matched_groups = set()
     
@@ -124,14 +124,22 @@ def determine_performers(text: str, default_performers: str = "") -> str:
         for query in idol["search_queries"]:
             q_clean = query.lower().replace(" ", "")
             if q_clean in text_clean:
-                matched_groups.add(group_name)
-                break
-                
-    # 兼任メンバーが含まれている場合は、両方の本命グループを追加
-    if has_concurrent:
-        matched_groups.add("東京CuteCute")
-        matched_groups.add("Red radiance")
-        
+                # 兼任メンバーの名前がマッチした場合のみ除外判定を行う
+                is_concurrent = any(c.lower() in q_clean or q_clean in c.lower() for c in concurrent_members)
+                if is_concurrent:
+                    pos = text_clean.find(q_clean)
+                    context = text_clean[pos:pos+25]
+                    is_excluded = any(kw in context for kw in exclude_keywords)
+                    if is_excluded:
+                        continue # 除外されている場合はこのキーワードでのマッチを無視
+                        
+                    # 除外されていない場合は、兼任メンバーなので両グループを追加
+                    matched_groups.add("東京CuteCute")
+                    matched_groups.add("Red radiance")
+                else:
+                    # 通常メンバーまたはグループ名自体のマッチ
+                    matched_groups.add(group_name)
+                    
     if not matched_groups:
         return default_performers
         
