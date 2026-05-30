@@ -173,6 +173,27 @@ def search_web_free_lives(area: str, date_str: str) -> list:
                 if not title or not link:
                     continue
                 
+                # 汎用イベント一覧ページや、他地域ノイズのフィルタリング
+                url_lower = link.lower()
+                title_lower = title.lower()
+                snippet_lower = snippet.lower()
+                
+                # A. 汎用の「全国店舗イベント一覧」ページ（個別イベント名がないもの）はノイズになるためスキップ
+                if "store/event" in url_lower or "store/list" in url_lower or "event/index" in url_lower:
+                    if not any(k in title_lower or k in snippet_lower for k in ["発売記念", "ミニライブ", "特典会", "フリーライブ", "リリイベ"]):
+                        continue
+                
+                # B. 地域間のクロスノイズ判定（例：新潟検索時に東京の地名が入っていて新潟の文字がないものを弾く）
+                tokyo_keywords = ["東京", "tokyo", "shibuya", "渋谷", "shinjuku", "新宿", "harajuku", "原宿", "ikebukuro", "池袋", "akihabara", "秋葉原"]
+                niigata_keywords = ["新潟", "niigata", "bandai", "万代", "furumachi", "古町"]
+                
+                if area == "新潟":
+                    if any(k in url_lower or k in title_lower for k in tokyo_keywords) and not any(k in title_lower or k in snippet_lower for k in niigata_keywords):
+                        continue
+                elif area == "東京":
+                    if any(k in url_lower or k in title_lower for k in niigata_keywords) and not any(k in title_lower or k in snippet_lower for k in tokyo_keywords):
+                        continue
+
                 # タイトルを少し綺麗に整形し、Web検索由来であることがわかるようにマーク
                 clean_title = f"【Web検索】{title.strip()}"
                 
