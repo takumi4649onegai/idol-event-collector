@@ -367,9 +367,27 @@ def callback():
                 web_results = []
                 if target_area:
                     if is_this_week:
-                        web_results = search_web_free_lives(area=target_area, date_str="今週")
+                        # 今週の残り日付表現を生成 (例: "5/30 OR 5/31 OR 5月30日 OR 5月31日")
+                        today = datetime.today()
+                        days_left = 7 - today.weekday()
+                        date_queries = []
+                        for i in range(days_left):
+                            d = today + timedelta(days=i)
+                            date_queries.append(d.strftime("%m/%d"))
+                            date_queries.append(d.strftime("%m月%d日"))
+                        web_date_str = "(" + " OR ".join(date_queries) + ")"
+                        web_results = search_web_free_lives(area=target_area, date_str=web_date_str)
                     elif is_next_week:
-                        web_results = search_web_free_lives(area=target_area, date_str="来週")
+                        # 来週の日付表現を生成
+                        today = datetime.today()
+                        start_of_next_week = today + timedelta(days=7 - today.weekday())
+                        date_queries = []
+                        for i in range(7):
+                            d = start_of_next_week + timedelta(days=i)
+                            date_queries.append(d.strftime("%m/%d"))
+                            date_queries.append(d.strftime("%m月%d日"))
+                        web_date_str = "(" + " OR ".join(date_queries) + ")"
+                        web_results = search_web_free_lives(area=target_area, date_str=web_date_str)
                     elif target_date:
                         web_results = search_web_free_lives(area=target_area, date_str=target_date)
                 

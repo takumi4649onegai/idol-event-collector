@@ -138,12 +138,15 @@ def run_calendar_diagnostics() -> str:
             f"💡対策: Googleカレンダーの設定画面（マイカレンダーの設定 ➡ 特定のユーザーまたはグループとの共有）で、サービスアカウント（{credentials.service_account_email}）に対する権限が「予定の変更」または「変更および共有の管理」になっているか確認してください。「予定の表示（すべての予定の詳細）」のままだと書き込み（同期）ができません。"
         )
 
+    tavily_status = "✅ Web検索機能 (Tavily API): 有効" if config.TAVILY_API_KEY else "⚠️ Web検索機能 (Tavily API): 未設定（💡対策: リアルタイムWeb検索を利用するには、Renderの環境変数に TAVILY_API_KEY を設定してください）"
+
     return (
-        f"📋 Googleカレンダー診断レポート:\n"
+        f"📋 システム診断レポート:\n"
         f"・カレンダーID: {config.GOOGLE_CALENDAR_ID}\n"
         f"・接続アカウント: {credentials.service_account_email}\n"
         f"・{read_status}\n"
-        f"・{write_status}"
+        f"・{write_status}\n"
+        f"・{tavily_status}"
     )
 
 def manually_sync_db_to_calendar() -> str:
