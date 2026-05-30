@@ -312,6 +312,13 @@ def callback():
                     send_reply(reply_token, diagnostics_res)
                     continue
 
+                # カレンダー手動同期コマンド
+                if user_text.lower() in ["同期", "sync", "そうき"]:
+                    from calendar_client import manually_sync_db_to_calendar
+                    sync_res = manually_sync_db_to_calendar()
+                    send_reply(reply_token, sync_res)
+                    continue
+
                 # 「追加 NGT48」や「登録 NGT48」といった命令コマンドを判定する
                 if user_text.startswith("追加") or user_text.startswith("登録"):
                     # コマンドの後に続く対象名（グループ名等）を切り出す
