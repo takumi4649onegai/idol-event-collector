@@ -340,11 +340,17 @@ def callback():
                     send_reply(reply_token, reply_text)
                     continue
                 
+                is_this_week = "今週" in user_text or "こんしゅう" in user_text
+                is_next_week = "来週" in user_text or "らいしゅう" in user_text
+                
                 # メッセージの解析 (日付・地域・キーワードを取り出す)
                 target_date, target_area, target_keyword = parse_user_message(user_text)
                 
-                # 日付、地域、キーワードのいずれも検出できなかった場合はヘルプメッセージを返す
-                if not target_date and not target_area and not target_keyword:
+                if is_this_week or is_next_week:
+                    target_date = None
+                
+                # 日付、地域、キーワード、今週/来週のいずれも検出できなかった場合はヘルプメッセージを返す
+                if not target_date and not target_area and not target_keyword and not is_this_week and not is_next_week:
                     reply_text = (
                         "🌟【地下アイドルイベント案内ボット】🌟\n\n"
                         "探したい「日付」や「地域」または「グループ名」を入れて話しかけてください！\n"
@@ -357,12 +363,17 @@ def callback():
                 # データベースから条件に合うイベントを検索
                 db_results = query_events(date_str=target_date, area_str=target_area, keyword=target_keyword)
                 
-                # その場でのWeb検索の融合 (日付・地域がある場合はフリーライブ検索、キーワードのみの場合はその対象のリアルタイムWeb検索)
+                # その場でのWeb検索の融合 (日付・地域・今週来週がある場合はフリーライブ検索、キーワードのみの場合はその対象のリアルタイムWeb検索)
                 web_results = []
-                if target_area and target_date:
-                    web_results = search_web_free_lives(area=target_area, date_str=target_date)
+                if target_area:
+                    if is_this_week:
+                        web_results = search_web_free_lives(area=target_area, date_str="今週")
+                    elif is_next_week:
+                        web_results = search_web_free_lives(area=target_area, date_str="来週")
+                    elif target_date:
+                        web_results = search_web_free_lives(area=target_area, date_str=target_date)
                 
-                # キーワードが指定されている場合は、さらにそのグループ特有の最新X告知やWeb情報をリアルタイム補完
+                # キーワードが指定されている場合は、さらにそのグループ特有 of 最新X告知やWeb情報をリアルタイム補完
                 if target_keyword:
                     web_kw_results = search_web_keyword(keyword=target_keyword, date_str=target_date)
                     web_results.extend(web_kw_results)
@@ -370,8 +381,25 @@ def callback():
                 # データのマージ (SQLite DBの結果 + Web検索の結果)
                 merged_results = db_results + web_results
                 
+                # 今週・来週の日付フィルターの適用
+                today = datetime.today()
+                if is_this_week:
+                    start_date = today.strftime("%Y-%m-%d")
+                    end_date = (today + timedelta(days=6 - today.weekday())).strftime("%Y-%m-%d")
+                    merged_results = [ev for ev in merged_results if start_date <= ev.get("date", "") <= end_date]
+                elif is_next_week:
+                    start_date = (today + timedelta(days=7 - today.weekday())).strftime("%Y-%m-%d")
+                    end_date = (today + timedelta(days=13 - today.weekday())).strftime("%Y-%m-%d")
+                    merged_results = [ev for ev in merged_results if start_date <= ev.get("date", "") <= end_date]
+                
                 # 返信メッセージの組み立て
-                header_date = target_date if target_date else "いつでも"
+                if is_this_week:
+                    header_date = "今週"
+                elif is_next_week:
+                    header_date = "来週"
+                else:
+                    header_date = target_date if target_date else "いつでも"
+                
                 header_area = target_area if target_area else "全地域"
                 header_kw = f" 🔑【{target_keyword}】" if target_keyword else ""
                 
