@@ -254,7 +254,7 @@ def search_web_keyword(keyword: str, date_str: str = None) -> list:
         "query": query,
         "search_depth": "advanced",
         "include_answer": False,
-        "max_results": 5
+        "max_results": 10
     }
     
     found_events = []
@@ -281,6 +281,15 @@ def search_web_keyword(keyword: str, date_str: str = None) -> list:
                         if md_match:
                             year = datetime.today().year
                             event_date = f"{year}-{int(md_match.group(1)):02d}-{int(md_match.group(2)):02d}"
+                        else:
+                            slash_match = re.search(r'(\d{1,2})/(\d{1,2})', title + " " + snippet)
+                            if slash_match:
+                                year = datetime.today().year
+                                event_date = f"{year}-{int(slash_match.group(1)):02d}-{int(slash_match.group(2)):02d}"
+                                
+                if not event_date:
+                    # 日付が抽出できない公式サイトやチケット一覧等は、今日の案内（情報サイト直リンク）として残す
+                    event_date = datetime.today().strftime("%Y-%m-%d")
                             
                 # 今日以降の日付、または指定日のイベントのみを採用
                 today_str = datetime.today().strftime("%Y-%m-%d")
