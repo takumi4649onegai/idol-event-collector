@@ -77,3 +77,39 @@ def add_to_google_calendar(event: dict) -> bool:
     except Exception as e:
         print(f"❌ Googleカレンダー自動登録中にエラーが発生しました: {str(e)}")
         return False
+
+def run_calendar_diagnostics() -> str:
+    """Googleカレンダー連携のデバッグ用診断を実行する"""
+    if not config.GOOGLE_CALENDAR_ID:
+        return "❌ GOOGLE_CALENDAR_ID が環境変数に設定されていません。"
+    if not config.GOOGLE_SERVICE_ACCOUNT_JSON:
+        return "❌ GOOGLE_SERVICE_ACCOUNT_JSON が環境変数に設定されていません。"
+
+    try:
+        service_account_info = json.loads(config.GOOGLE_SERVICE_ACCOUNT_JSON)
+    except Exception as e:
+        return f"❌ GOOGLE_SERVICE_ACCOUNT_JSON のJSONパースに失敗しました: {str(e)}"
+
+    try:
+        from google.oauth2 import service_account
+        from googleapiclient.discovery import build
+    except ImportError:
+        return "❌ google-api-python-client または google-auth がインストールされていません。"
+
+    try:
+        credentials = service_account.Credentials.from_service_account_info(service_account_info)
+        service = build('calendar', 'v3', credentials=credentials)
+        
+        # 簡易的なAPI呼び出しを実行して接続テスト
+        service.events().list(
+            calendarId=config.GOOGLE_CALENDAR_ID,
+            maxResults=1
+        ).execute()
+        
+        return (
+            f"✅ GoogleカレンダーAPI疎通テストに成功しました！\n"
+            f"・カレンダーID: {config.GOOGLE_CALENDAR_ID}\n"
+            f"・接続サービスアカウント: {credentials.service_account_email}"
+        )
+    except Exception as e:
+        return f"❌ Googleカレンダー疎通テスト失敗: {str(e)}"

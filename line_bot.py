@@ -305,6 +305,13 @@ def callback():
                 reply_token = event.get("replyToken")
                 user_text = event.get("message", {}).get("text", "").strip()
                 
+                # デバッグ診断コマンド
+                if user_text.lower() in ["デバッグ", "debug", "診断", "しんだん"]:
+                    from calendar_client import run_calendar_diagnostics
+                    diagnostics_res = run_calendar_diagnostics()
+                    send_reply(reply_token, diagnostics_res)
+                    continue
+
                 # 「追加 NGT48」や「登録 NGT48」といった命令コマンドを判定する
                 if user_text.startswith("追加") or user_text.startswith("登録"):
                     # コマンドの後に続く対象名（グループ名等）を切り出す
