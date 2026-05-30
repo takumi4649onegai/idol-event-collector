@@ -199,16 +199,31 @@ def search_web_free_lives(area: str, date_str: str) -> list:
                 
                 # スニペットやタイトルから日付を抽出
                 event_date = None
-                date_match = re.search(r'(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})', title + " " + snippet)
+                # スニペットからシステムメンテナンスや規約・お知らせのノイズを除去して誤判定を防ぐ
+                clean_snippet = snippet
+                for noise_word in ["メンテナンス", "システム", "ログイン", "利用規約", "お知らせ", "会員登録", "アンケート"]:
+                    clean_snippet = re.sub(r'[^.!?。\n]*' + re.escape(noise_word) + r'[^.!?。\n]*', '', clean_snippet)
+
+                # まずタイトルから日付抽出を試みる (タイトルの方がノイズが少ないため)
+                date_match = re.search(r'(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})', title)
+                if not date_match:
+                    date_match = re.search(r'(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})', clean_snippet)
+
                 if date_match:
                     event_date = f"{date_match.group(1)}-{int(date_match.group(2)):02d}-{int(date_match.group(3)):02d}"
                 else:
-                    md_match = re.search(r'(\d{1,2})月(\d{1,2})日', title + " " + snippet)
+                    md_match = re.search(r'(\d{1,2})月(\d{1,2})日', title)
+                    if not md_match:
+                        md_match = re.search(r'(\d{1,2})月(\d{1,2})日', clean_snippet)
+
                     if md_match:
                         year = datetime.today().year
                         event_date = f"{year}-{int(md_match.group(1)):02d}-{int(md_match.group(2)):02d}"
                     else:
-                        slash_match = re.search(r'(\d{1,2})/(\d{1,2})', title + " " + snippet)
+                        slash_match = re.search(r'(\d{1,2})/(\d{1,2})', title)
+                        if not slash_match:
+                            slash_match = re.search(r'(\d{1,2})/(\d{1,2})', clean_snippet)
+
                         if slash_match:
                             year = datetime.today().year
                             event_date = f"{year}-{int(slash_match.group(1)):02d}-{int(slash_match.group(2)):02d}"
@@ -273,16 +288,31 @@ def search_web_keyword(keyword: str, date_str: str = None) -> list:
                 # スニペットやタイトルから日付を抽出
                 event_date = date_str
                 if not event_date:
-                    date_match = re.search(r'(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})', title + " " + snippet)
+                    # スニペットからシステムメンテナンスや規約・お知らせのノイズを除去して誤判定を防ぐ
+                    clean_snippet = snippet
+                    for noise_word in ["メンテナンス", "システム", "ログイン", "利用規約", "お知らせ", "会員登録", "アンケート"]:
+                        clean_snippet = re.sub(r'[^.!?。\n]*' + re.escape(noise_word) + r'[^.!?。\n]*', '', clean_snippet)
+
+                    # まずタイトルから日付抽出を試みる (タイトルの方がノイズが少ないため)
+                    date_match = re.search(r'(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})', title)
+                    if not date_match:
+                        date_match = re.search(r'(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})', clean_snippet)
+
                     if date_match:
                         event_date = f"{date_match.group(1)}-{int(date_match.group(2)):02d}-{int(date_match.group(3)):02d}"
                     else:
-                        md_match = re.search(r'(\d{1,2})月(\d{1,2})日', title + " " + snippet)
+                        md_match = re.search(r'(\d{1,2})月(\d{1,2})日', title)
+                        if not md_match:
+                            md_match = re.search(r'(\d{1,2})月(\d{1,2})日', clean_snippet)
+
                         if md_match:
                             year = datetime.today().year
                             event_date = f"{year}-{int(md_match.group(1)):02d}-{int(md_match.group(2)):02d}"
                         else:
-                            slash_match = re.search(r'(\d{1,2})/(\d{1,2})', title + " " + snippet)
+                            slash_match = re.search(r'(\d{1,2})/(\d{1,2})', title)
+                            if not slash_match:
+                                slash_match = re.search(r'(\d{1,2})/(\d{1,2})', clean_snippet)
+
                             if slash_match:
                                 year = datetime.today().year
                                 event_date = f"{year}-{int(slash_match.group(1)):02d}-{int(slash_match.group(2)):02d}"
