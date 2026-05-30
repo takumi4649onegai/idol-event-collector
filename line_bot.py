@@ -401,6 +401,27 @@ def callback():
                     send_reply(reply_token, sync_res)
                     continue
 
+                # ケミカル⇄リアクション スケジュール一括登録コマンド
+                if user_text in ["ケミカルスケジュール", "スケジュール登録", "スケジュール", "けみかるすけじゅーる"]:
+                    from import_chemical_schedule import import_chemical_schedule
+                    report = import_chemical_schedule()
+                    reply_text = (
+                        f"📅【ケミカル⇄リアクション スケジュール登録】\n"
+                        f"公式Xから抽出したライブ予定（5月〜7月）を一括登録・同期しました！\n\n"
+                        f"・処理した予定: {report['total']} 件\n"
+                        f"・新規カレンダー登録: {report['added']} 件\n"
+                        f"・重複スキップ: {report['skipped']} 件\n"
+                    )
+                    if report['failed'] > 0:
+                        reply_text += f"・カレンダー同期失敗: {report['failed']} 件\n"
+                        
+                    reply_text += (
+                        f"\n💡「同期」と送信するか、サーバー起動時に、Googleカレンダーへの自動再同期が試みられます。\n"
+                        f"「今日新潟」や「ケミカル」と話しかけて最新の予定を検索することも可能です！🌟"
+                    )
+                    send_reply(reply_token, reply_text)
+                    continue
+
                 # 「追加 NGT48」や「登録 NGT48」といった命令コマンドを判定する
                 if user_text.startswith("追加") or user_text.startswith("登録"):
                     # コマンドの後に続く対象名（グループ名等）を切り出す
