@@ -49,6 +49,22 @@ def add_to_google_calendar(event: dict) -> bool:
             }
         }
 
+        # 重複登録を避けるため、同一日かつ同一タイトルのイベントが既に存在するか確認する
+        time_min = f"{date_str}T00:00:00Z"
+        time_max = f"{date_str}T23:59:59Z"
+        
+        events_result = service.events().list(
+            calendarId=config.GOOGLE_CALENDAR_ID,
+            timeMin=time_min,
+            timeMax=time_max,
+            q=calendar_event['summary']
+        ).execute()
+        
+        existing_events = events_result.get('items', [])
+        if existing_events:
+            print(f"⏭️ Googleカレンダー登録スキップ（既に存在します）: {calendar_event['summary']} ({date_str})")
+            return True
+
         # API呼び出し
         inserted_event = service.events().insert(
             calendarId=config.GOOGLE_CALENDAR_ID,

@@ -445,6 +445,35 @@ def callback():
         
     return "OK", 200
 
+def sync_all_db_events_to_calendar():
+    """データベース内の未来の予定をすべてGoogleカレンダーへ強制同期する（重複は自動回避）"""
+    import config
+    if not config.GOOGLE_CALENDAR_ID or not config.GOOGLE_SERVICE_ACCOUNT_JSON:
+        return
+        
+    print("🔄 [Startup] Googleカレンダーへのデータベース全体同期を開始します...")
+    from db_manager import query_events
+    from calendar_client import add_to_google_calendar
+    from datetime import datetime
+    import time
+    
+    # サーバー起動時に少し待ってから開始（初期化待ち）
+    time.sleep(5)
+    
+    # 今日以降のイベントをすべて取得
+    today_str = datetime.today().strftime("%Y-%m-%d")
+    events = query_events(date_str=None)
+    
+    sync_count = 0
+    for ev in events:
+        if ev.get("date", "") >= today_str:
+            success = add_to_google_calendar(ev)
+            if success:
+                sync_count += 1
+                time.sleep(1.0) # APIレート制限回避
+                
+    print(f"📊 [Startup] Googleカレンダー同期完了: {sync_count} 件のイベントを処理しました。")
+
 if __name__ == "__main__":
     import sys
     import io
@@ -457,5 +486,9 @@ if __name__ == "__main__":
             sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', write_through=True)
             sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', write_through=True)
         
+    # バックグラウンドスレッドでGoogleカレンダー全体同期を走らせる
+    import threading
+    threading.Thread(target=sync_all_db_events_to_calendar, daemon=True).start()
+
     print(f"🔌 LINE Webhook サーバーをポート {config.PORT} で起動します...")
     app.run(host="0.0.0.0", port=config.PORT, debug=False)
