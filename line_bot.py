@@ -242,7 +242,7 @@ def search_web_keyword(keyword: str, date_str: str = None) -> list:
     if not config.TAVILY_API_KEY:
         return []
         
-    query_parts = [f"\"{keyword}\""]
+    query_parts = [keyword]
     if date_str:
         query_parts.append(date_str)
     query_parts.append("(ライブ OR イベント OR 告知 OR 出演 OR ラジオ OR 水着)")
