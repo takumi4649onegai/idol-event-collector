@@ -42,22 +42,44 @@ def send_line_push_notification(event: dict) -> bool:
         "Authorization": f"Bearer {config.LINE_CHANNEL_ACCESS_TOKEN}"
     }
     
-    # メッセージの作成
-    raw_text_section = ""
-    if "raw_text" in event and event["raw_text"]:
-        indented_text = "\n".join(f"  {line}" for line in event["raw_text"].split("\n")[:10])
-        if len(event["raw_text"].split("\n")) > 10:
-            indented_text += "\n  ..."
-        raw_text_section = f"\n\n📝 【告知本文】:\n{indented_text}"
+    from scraper.utils import parse_time_and_venue
+    from datetime import datetime
+    
+    title = event.get("title", "")
+    raw_text = event.get("raw_text", "")
+    area = event.get("area", "その他")
+    date_str = event.get("date", "")
+    
+    # 時間と会場の抽出
+    start_time, venue = parse_time_and_venue(title, raw_text, area)
+    
+    # 曜日のパースと日付整形
+    weekday_str = ""
+    try:
+        dt = datetime.strptime(date_str, "%Y-%m-%d")
+        weeks = ["月", "火", "水", "木", "金", "土", "日"]
+        weekday_str = f"({weeks[dt.weekday()]})"
+        display_date = f"{dt.strftime('%Y/%m/%d')}{weekday_str}"
+    except Exception:
+        display_date = date_str
         
+    time_display = f" {start_time}" if start_time and start_time != "00:00" else ""
+    
+    # タイトルからソース表示を除去してクリーンに
+    clean_title = title.replace("【LivePocket】", "").replace("【TIGET】", "").replace("【TicketDive】", "").replace("【X告知】", "").replace("【HP告知】", "").replace("【Web検索】", "").strip()
+    
+    # 新潟ローカルシグナルの検出
+    combined_text = f"{title} {raw_text}"
+    is_niigata_local = any(kw in combined_text for kw in ["新潟", "ガタ", "古町", "苗場"])
+    
+    header = "🚨【見逃し厳禁速報】新潟ローカルシグナル検知！" if is_niigata_local else "🌟【本命マークアイドル新着情報】🌟"
+    
     message_text = (
-        f"🌟【本命アイドル新着情報】🌟\n"
-        f"📅 日付: {event['date']}\n"
-        f"📍 エリア: {event['area']}\n"
-        f"🎤 ライブ名: {event['title']}\n"
-        f"👥 出演: {event['performers']}\n"
-        f"🔗 詳細URL: {event['url'] or 'なし'}"
-        f"{raw_text_section}\n"
+        f"{header}\n"
+        f"🗓️ 日時：{display_date}{time_display}\n"
+        f"🎵 イベント名：{clean_title}\n"
+        f"📍 会場：{venue}\n"
+        f"📲 公式情報：{event.get('url') or 'なし'}\n"
         f"────────────────────"
     )
     

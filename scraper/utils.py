@@ -160,3 +160,25 @@ def determine_performers(text: str, default_performers: str = "") -> str:
             ordered_groups.append(g)
             
     return ", ".join(ordered_groups)
+
+def parse_time_and_venue(title: str, raw_text: str, default_area: str = "その他") -> tuple:
+    """
+    イベントのタイトルや本文から、開始時間(HH:MM)と会場名(場所)を抽出する。
+    重複排除(デデュープ)のキー作成用に使用します。
+    """
+    combined = f"{title} {raw_text or ''}"
+    
+    # 1. 開始時間の抽出 (例: 18:30, 19:00 など)
+    time_match = re.search(r'\b(\d{1,2}:\d{2})\b', combined)
+    start_time = time_match.group(1) if time_match else "00:00"
+    
+    # 2. 会場名(場所)の抽出
+    # 会場らしきキーワードの後に続く文字列を抽出する
+    venue = default_area
+    venue_match = re.search(r'(?:会場|場所|place|Place|＠|@|スタジオ|シアター|ホール|ライブハウス)[\s：:ー]*([^\s|｜(（【]+)', combined)
+    if venue_match:
+        venue = venue_match.group(1).strip()
+        # 余分な括弧や記号を削除
+        venue = re.sub(r'[\(\)（）\-\[\]\{\}]', '', venue).strip()
+        
+    return start_time, venue

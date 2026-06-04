@@ -133,6 +133,51 @@ def query_events(date_str: str = None, area_str: str = None, keyword: str = None
     finally:
         conn.close()
 
+def is_duplicate_by_dedupe_key(event: dict) -> bool:
+    """
+    指定されたイベントが、【日付 ✕ 開始時間 ✕ 会場名(場所)】のキーで
+    データベース側に既に存在するか（重複しているか）を判定する。
+    """
+    from scraper.utils import parse_time_and_venue
+    
+    # 判定対象イベントのキーを生成
+    target_date = event.get("date", "")
+    target_title = event.get("title", "")
+    target_raw = event.get("raw_text", "")
+    target_area = event.get("area", "その他")
+    
+    target_time, target_venue = parse_time_and_venue(target_title, target_raw, target_area)
+    target_key = f"{target_date}_{target_time}_{target_venue}"
+    
+    # データベースから未来（今日以降）の全イベントを取得
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    today_str = datetime.today().strftime("%Y-%m-%d")
+    
+    try:
+        # 未来のイベントを全取得して走査
+        cursor.execute("SELECT title, date, area, raw_text FROM events WHERE date >= ?", (today_str,))
+        rows = cursor.fetchall()
+        
+        for row in rows:
+            r_title = row["title"]
+            r_raw = row["raw_text"]
+            r_area = row["area"]
+            r_date = row["date"]
+            
+            r_time, r_venue = parse_time_and_venue(r_title, r_raw, r_area)
+            r_key = f"{r_date}_{r_time}_{r_venue}"
+            
+            if r_key == target_key:
+                return True
+        return False
+    except Exception as e:
+        print(f"🚨 重複排除キーチェック中にエラーが発生しました: {str(e)}")
+        return False
+    finally:
+        conn.close()
+
 # 起動時に必ずデータベース構造を確保する
 init_db()
 

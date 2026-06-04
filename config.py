@@ -26,7 +26,8 @@ BASE_MARKING_IDOLS = [
             "柚谷双葉", "柚谷 双葉",
             "有栖れる", "有栖 れる"
         ],
-        "x_id": "TOKYO_Cute2"
+        "x_id": "TOKYO_Cute2",
+        "tiget_performer_id": "4483"
     },
     {
         "name": "Red radiance",
@@ -43,7 +44,8 @@ BASE_MARKING_IDOLS = [
             "柚谷双葉", "柚谷 双葉",
             "西萌葉", "西 萌葉"
         ],
-        "x_id": "gce_rr"
+        "x_id": "gce_rr",
+        "tiget_performer_id": ""
     }
 ]
 

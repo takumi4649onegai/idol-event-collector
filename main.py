@@ -16,7 +16,7 @@ import config
 import db_manager
 import line_client
 from scraper.utils import clean_text
-from scraper.tiget import scrape_tiget_events
+from scraper.tiget import scrape_tiget_events, scrape_tiget_performer
 from scraper.livepocket import scrape_livepocket_events
 from scraper.ticketdive import scrape_ticketdive_events
 from scraper.x_scraper import fetch_tweets_via_rss
@@ -84,7 +84,7 @@ def run_marked_idols_collection() -> tuple:
                 except Exception as e:
                     print(f"🚨 TicketDive取得中にエラー: {str(e)}")
                     
-        # --- 公式サイトスクレイピング (限定公開チケットの救済策) ---
+        # --- 公式サイトスクレイピング (限定公開チケットの救換策) ---
         if name == "東京CuteCute":
             try:
                 from scraper.tokyocutecute_official import scrape_tokyocutecute_site
@@ -92,6 +92,15 @@ def run_marked_idols_collection() -> tuple:
                 idol_events.extend(hp_events)
             except Exception as e:
                 print(f"🚨 公式サイト取得中にエラー: {str(e)}")
+                
+        # --- TIGET パフォーマーページ スクレイピング (最優先情報源) ---
+        tiget_perf_id = idol.get("tiget_performer_id", "")
+        if config.ENABLE_TIGET_SCRAPING and tiget_perf_id:
+            try:
+                tiget_perf = scrape_tiget_performer(tiget_perf_id, name)
+                idol_events.extend(tiget_perf)
+            except Exception as e:
+                print(f"🚨 TIGETパフォーマーページ取得中にエラー: {str(e)}")
                 
         # --- X RSS スクレイピング ---
         if config.ENABLE_X_SCRAPING and x_id:
@@ -126,24 +135,47 @@ def run_marked_idols_collection() -> tuple:
                 print(f"⏭️ 過去イベント（保存スキップ）: {ev['title']} ({ev['date']})")
                 continue
                 
-            # データベースへの保存を試みる
+            # データベースへの保存を試みる (URL重複は自動スキップ)
             is_new = db_manager.insert_event(ev)
             
+            # 新潟ローカルシグナル判定
+            combined_text = f"{ev.get('title', '')} {ev.get('raw_text', '')}"
+            is_niigata_local = any(kw in combined_text for kw in ["新潟", "ガタ", "古町", "苗場"])
+            
             if is_new:
-                print(f"🆕 本命マーク新着検知: {ev['title']} ({ev['date']})")
-                
-                # Googleカレンダーへの無言自動同期フックの実行
-                from calendar_client import add_to_google_calendar
-                add_to_google_calendar(ev)
-                
-                # 自動プッシュ通知は行わない（手動クエリのみのためコメントアウト）
-                # line_client.send_line_push_notification(ev)
-                new_notified += 1
+                if is_niigata_local:
+                    # 1. 新潟ローカルの場合、デデュープ重複判定をバイパスして最優先でLINE通知＆カレンダー同期！
+                    print(f"🚨 新潟ローカルシグナル検知 (最優先プッシュ通知): {ev['title']} ({ev['date']})")
+                    line_client.send_line_push_notification(ev)
+                    from calendar_client import add_to_google_calendar
+                    add_to_google_calendar(ev)
+                    new_notified += 1
+                else:
+                    # 2. 通常イベントの場合、時間・会場による重複排除(デデュープ)を行う
+                    from db_manager import is_duplicate_by_dedupe_key
+                    if not is_duplicate_by_dedupe_key(ev):
+                        print(f"🆕 本命マーク新着検知 (プッシュ通知): {ev['title']} ({ev['date']})")
+                        line_client.send_line_push_notification(ev)
+                        from calendar_client import add_to_google_calendar
+                        add_to_google_calendar(ev)
+                        new_notified += 1
+                    else:
+                        print(f"⏭️ 同一予定を別ソースで検知済みの為スキップ (デデュープ): {ev['title']} ({ev['date']})")
                 
                 # APIレート制限の回避ウェイト
                 time.sleep(1.5)
             else:
-                print(f"⏭️ 既知（通知スキップ）: {ev['title']} ({ev['date']})")
+                # 完全に同一のURLなどがすでにデータベースに存在する場合でも、
+                # 新潟ローカルシグナルがある場合は、見逃し厳禁速報として毎回確実にカレンダー登録/同期などを実施
+                if is_niigata_local:
+                    print(f"🚨 新潟ローカル検知 (既知データですが最優先でLINE通知): {ev['title']} ({ev['date']})")
+                    line_client.send_line_push_notification(ev)
+                    from calendar_client import add_to_google_calendar
+                    add_to_google_calendar(ev)
+                    new_notified += 1
+                    time.sleep(1.5)
+                else:
+                    print(f"⏭️ 既知（通知スキップ）: {ev['title']} ({ev['date']})")
                 
     return total_scraped, new_notified
 
