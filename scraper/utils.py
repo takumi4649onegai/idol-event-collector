@@ -16,21 +16,46 @@ TOKYO_KEYWORDS = [
 
 def determine_area(text: str) -> str:
     """
-    イベントのタイトルや本文、会場名から「東京」「新潟」「その他」を判別する。
+    イベントのタイトルや本文から会場名（場所）を抽出し、
+    その会場名に新潟または東京の要素があるかを厳密に判定してエリアを割り当てる。
     """
     if not text:
-        return "その他"
-    
+        return "other" if False else "その他"
+        
     text_lower = text.lower()
     
-    # 新潟判定
-    if any(keyword in text_lower for keyword in NIIGATA_KEYWORDS):
+    # 1. 会場名（場所）の抽出を試みる
+    venue = ""
+    venue_match = re.search(r'(?:会場|場所|place|Place|＠|@|スタジオ|シアター|ホール|ライブハウス)[\s：:ー]*([^\s|｜(（【\n]+)', text)
+    if venue_match:
+        venue = venue_match.group(1).strip().lower()
+        # 会場名の後にありがちな余分なテキスト（出演、開場、開演、チケットなど）を切り落とす
+        venue = re.split(r'(?:出演|開場|開演|チケット|予約|主催|企画|料金|・|\|)', venue)[0].strip()
+        venue = re.sub(r'[\(\)（）\-\[\]\{\}！!？?]', '', venue).strip()
+    
+    # 新潟の会場要素判定
+    is_niigata_venue = False
+    if venue:
+        is_niigata_venue = any(keyword in venue for keyword in NIIGATA_KEYWORDS)
+        is_tokyo_venue = any(keyword in venue for keyword in TOKYO_KEYWORDS)
+        if is_niigata_venue and not is_tokyo_venue:
+            return "新潟"
+        if is_tokyo_venue:
+            return "東京"
+            
+    # 2. 会場名が明示されていない、または判定が曖昧な場合のフォールバック
+    # 東京の地名や会場情報がある場合は、告知に「新潟」と書かれていても東京イベントとして判定する
+    has_tokyo_signal = any(kw in text_lower for kw in TOKYO_KEYWORDS)
+    has_niigata_signal = any(kw in text_lower for kw in NIIGATA_KEYWORDS)
+    
+    if is_niigata_venue:
         return "新潟"
-    
-    # 東京判定
-    if any(keyword in text_lower for keyword in TOKYO_KEYWORDS):
+        
+    if has_tokyo_signal:
         return "東京"
-    
+    elif has_niigata_signal:
+        return "新潟"
+        
     return "その他"
 
 def parse_date(date_str: str) -> str:

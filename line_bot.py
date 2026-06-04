@@ -502,6 +502,10 @@ def callback():
                 # データのマージ (SQLite DBの結果 + Web検索の結果)
                 merged_results = db_results + web_results
                 
+                # 具体的な日付が指定されている場合、その日付に完全一致するもの以外を徹底排除 (過去や未来の誤混入防止)
+                if target_date:
+                    merged_results = [ev for ev in merged_results if ev.get("date", "") == target_date]
+                
                 # 今週・来週の日付フィルターの適用
                 today = datetime.today()
                 if is_this_week:
@@ -536,6 +540,8 @@ def callback():
                     # 2. 分類用のリスト作成 (確定チケット販売 vs SNS/HP告知)
                     ticket_list_text = []
                     sns_list_text = []
+                    links_footer = []
+                    link_idx = 1
                     
                     for ev in display_results:
                         date_display = ev["date"]
@@ -552,7 +558,6 @@ def callback():
                         clean_ev_title = re.sub(r'\s+', ' ', orig_title.replace('\n', ' ').replace('\r', ' ')).strip()
                         
                         # チケットサイトに属するか判定
-                        # 元タイトルにタグが含まれているか、またはURLが直接のチケットサイトのもの
                         url = ev.get("url", "")
                         is_ticket = any(k in orig_title for k in ["【LivePocket】", "【TIGET】", "【TicketDive】"]) or \
                                     any(k in url for k in ["livepocket.jp", "tiget.net", "ticketdive.com"])
@@ -560,9 +565,16 @@ def callback():
                         # 表示用にソースタグを取り除く
                         clean_ev_title = clean_ev_title.replace("【LivePocket】", "").replace("【TIGET】", "").replace("【TicketDive】", "").replace("【X告知】", "").replace("【HP告知】", "").replace("【Web検索】", "").strip()
                         
-                        url_part = f" 🔗 {url}" if url and not url.startswith("local_id:") else ""
+                        # URLの生出しを禁止し、フッター用にインデックス化して退避
+                        url_part = ""
+                        if url and not url.startswith("local_id:"):
+                            url_part = f" [{link_idx}]"
+                            links_footer.append(f"[{link_idx}] {clean_ev_title}\n🔗 {url}")
+                            link_idx += 1
+                            
                         perf_part = f" (👥 {ev['performers']})" if ev['performers'] and not target_keyword else ""
                         
+                        # 行の作成
                         event_line = f"・{date_display} | {clean_ev_title}{perf_part}{url_part}"
                         
                         if is_ticket:
@@ -579,6 +591,11 @@ def callback():
                         
                     events_joined = "\n\n".join(events_joined_parts).strip()
                     
+                    # 関連リンクフッターの組み立て
+                    links_section = ""
+                    if links_footer:
+                        links_section = "\n\n📲 関連リンク (チケット・告知等):\n" + "\n\n".join(links_footer)
+                    
                     # 他にもイベントがある場合のご案内フッター
                     footer_text = ""
                     if remaining_count > 0:
@@ -588,7 +605,8 @@ def callback():
                         f"📅【{header_date}】 📍【{header_area}】{header_kw}\n"
                         f"開催順イベント情報 (全 {len(merged_results)} 件)\n"
                         f"────────────────────\n\n"
-                        f"{events_joined}\n\n"
+                        f"{events_joined}"
+                        f"{links_section}\n\n"
                         f"────────────────────\n"
                         f"{footer_text}"
                         f"行きたいイベントは見つかりましたか？🌟"
