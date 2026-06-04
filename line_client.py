@@ -74,9 +74,12 @@ def send_line_push_notification(event: dict) -> bool:
     
     header = "🚨【見逃し厳禁速報】新潟ローカルシグナル検知！" if is_niigata_local else "🌟【本命マークアイドル新着情報】🌟"
     
-    url = event.get('url') or ''
-    url_section = f"\n📲 公式情報:\n🔗 {url}" if url and not url.startswith("local_id:") else ""
-    
+    # URLの生出しを禁止し、メッセージ最下部に格納する形式に変更
+    url_section = ""
+    event_url = event.get('url')
+    if event_url and not event_url.startswith("local_id:"):
+        url_section = f"\n📲 公式チケット・告知詳細:\n🔗 {event_url}"
+        
     message_text = (
         f"{header}\n"
         f"🗓️ 日時：{display_date}{time_display}\n"

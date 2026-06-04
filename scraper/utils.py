@@ -206,6 +206,7 @@ def parse_time_and_venue(title: str, raw_text: str, default_area: str = "その�
         
     return start_time, venue
 
+
 def is_generic_list_url(url: str) -> bool:
     """
     URLが個別イベントではなく、雑多な予定が並ぶ一覧・まとめページであるかを判定する。
