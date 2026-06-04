@@ -166,7 +166,8 @@ def scrape_tiget_performer(performer_id: str, default_performers: str = "") -> l
                 performers = clean_text(performers)
                 
         if not date_str:
-            date_str = parse_date(div.get_text())
+            print(f"⚠️ 開催日の明記がないためイベントをスキップします: {title}")
+            continue
             
         area = determine_area(div.get_text())
         

@@ -3,11 +3,13 @@ import re
 import hmac
 import hashlib
 import base64
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+JST = timezone(timedelta(hours=9))
 from flask import Flask, request, jsonify
 import requests
 import config
 from db_manager import query_events
+
 
 app = Flask(__name__)
 
@@ -61,7 +63,7 @@ def parse_user_message(text: str) -> tuple:
         area = "東京"
         
     # 3. 日付判定
-    today = datetime.today()
+    today = datetime.now(JST)
     
     if "今日" in text or "本日" in text or "きょう" in text:
         date_str = today.strftime("%Y-%m-%d")
@@ -142,12 +144,11 @@ def send_reply(reply_token: str, reply_text: str):
         print(f"🚨 LINE返信中に例外が発生しました: {str(e)}")
 
 def search_web_free_lives(area: str, date_str: str) -> list:
-    """
-    Tavily Web Search APIを使用して、指定された地域と日付で開催されるフリーライブ・インストアライブ・リリイベをリアルタイム検索する。
-    """
-    if not config.TAVILY_API_KEY:
-        print("⚠️ Tavily API Key が未設定のため、Web検索をスキップします（プレースホルダー動作）。")
-        return []
+    """Tavily Web Search 機能を無効化（全面禁止ルール適用）"""
+    return []
+
+    return []
+
     
     # 検索用クエリの作成 (例: "2026-05-30 新潟 アイドル フリーライブ リリイベ インストア")
     query = f"{date_str} {area} アイドル フリーライブ リリイベ インストア"
@@ -250,12 +251,11 @@ def search_web_free_lives(area: str, date_str: str) -> list:
     return found_events
 
 def search_web_keyword(keyword: str, date_str: str = None) -> list:
-    """
-    Tavily Web Search APIを使用して、グループ名などのキーワードに関連する直近または指定日の
-    イベント・メディア出演・Xの告知情報などをリアルタイム検索する。
-    """
-    if not config.TAVILY_API_KEY:
-        return []
+    """Tavily Web Search 機能を無効化（全面禁止ルール適用）"""
+    return []
+
+    return []
+
         
     query_parts = [keyword]
     if date_str:
@@ -507,7 +507,7 @@ def callback():
                     merged_results = [ev for ev in merged_results if ev.get("date", "") == target_date]
                 
                 # 今週・来週の日付フィルターの適用
-                today = datetime.today()
+                today = datetime.now(JST)
                 if is_this_week:
                     start_date = today.strftime("%Y-%m-%d")
                     end_date = (today + timedelta(days=6 - today.weekday())).strftime("%Y-%m-%d")
@@ -516,6 +516,7 @@ def callback():
                     start_date = (today + timedelta(days=7 - today.weekday())).strftime("%Y-%m-%d")
                     end_date = (today + timedelta(days=13 - today.weekday())).strftime("%Y-%m-%d")
                     merged_results = [ev for ev in merged_results if start_date <= ev.get("date", "") <= end_date]
+
                 
                 # 返信メッセージの組み立て
                 if is_this_week:
@@ -613,13 +614,22 @@ def callback():
                     )
                 else:
                     # 該当なしの場合
-                    reply_text = (
-                        f"📅【{header_date}】 📍【{header_area}】{header_kw}\n"
-                        f"のアイドルイベントは見つかりませんでした😢\n\n"
-                        f"新しくチケットサイトに登録されるか、Web情報が見つかり次第お知らせします！"
-                    )
+                    # 「今日は新潟でなんかある？」など、本日の新潟イベントが0件の際は厳格に1行固定メッセージとする
+                    today_str = datetime.now(JST).strftime("%Y-%m-%d")
+                    is_today = (target_date == today_str) or ("今日" in user_text or "本日" in user_text or "きょう" in user_text)
+                    is_niigata = (target_area == "新潟") or ("新潟" in user_text)
+                    
+                    if is_today and is_niigata:
+                        reply_text = f"本日（{today_str}）、新潟で開催される東京CuteCuteのイベントは見つかりませんでした。"
+                    else:
+                        reply_text = (
+                            f"📅【{header_date}】 📍【{header_area}】{header_kw}\n"
+                            f"のアイドルイベントは見つかりませんでした😢\n\n"
+                            f"新しくチケットサイトに登録されるか、Web情報が見つかり次第お知らせします！"
+                        )
                 
                 send_reply(reply_token, reply_text)
+
                 
     except Exception as e:
         print(f"🚨 Webhook処理中に例外が発生しました: {str(e)}")
@@ -642,7 +652,8 @@ def sync_all_db_events_to_calendar():
     time.sleep(5)
     
     # 今日以降のイベントをすべて取得
-    today_str = datetime.today().strftime("%Y-%m-%d")
+    today_str = datetime.now(JST).strftime("%Y-%m-%d")
+
     events = query_events(date_str=None)
     
     sync_count = 0

@@ -16,10 +16,9 @@ import config
 import db_manager
 import line_client
 from scraper.utils import clean_text
-from scraper.tiget import scrape_tiget_events, scrape_tiget_performer
-from scraper.livepocket import scrape_livepocket_events
-from scraper.ticketdive import scrape_ticketdive_events
-from scraper.x_scraper import fetch_tweets_via_rss
+from scraper.tiget import scrape_tiget_performer
+from datetime import datetime, timezone, timedelta
+JST = timezone(timedelta(hours=9))
 
 def run_marked_idols_collection() -> tuple:
     """
@@ -50,49 +49,10 @@ def run_marked_idols_collection() -> tuple:
         elif name == "Red radiance":
             ticket_search_words = ["Red radiance", "Redradiance"]
         
-        for word in ticket_search_words:
-            # --- TIGET スクレイピング ---
-            if config.ENABLE_TIGET_SCRAPING:
-                try:
-                    tiget = scrape_tiget_events(word)
-                    # 出演者名を統一
-                    for ev in tiget:
-                        ev["performers"] = name
-                    idol_events.extend(tiget)
-                except Exception as e:
-                    print(f"🚨 TIGET取得中にエラー: {str(e)}")
-                    
-            # --- LivePocket スクレイピング ---
-            if config.ENABLE_LIVEPOCKET_SCRAPING:
-                try:
-                    lp = scrape_livepocket_events(word)
-                    # 出演者名を統一
-                    for ev in lp:
-                        ev["performers"] = name
-                    idol_events.extend(lp)
-                except Exception as e:
-                    print(f"🚨 LivePocket取得中にエラー: {str(e)}")
-                    
-            # --- TicketDive スクレイピング ---
-            if config.ENABLE_TICKETDIVE_SCRAPING:
-                try:
-                    td = scrape_ticketdive_events(word)
-                    # 出演者名を統一
-                    for ev in td:
-                        ev["performers"] = name
-                    idol_events.extend(td)
-                except Exception as e:
-                    print(f"🚨 TicketDive取得中にエラー: {str(e)}")
-                    
-        # --- 公式サイトスクレイピング (限定公開チケットの救換策) ---
-        if name == "東京CuteCute":
-            try:
-                from scraper.tokyocutecute_official import scrape_tokyocutecute_site
-                hp_events = scrape_tokyocutecute_site()
-                idol_events.extend(hp_events)
-            except Exception as e:
-                print(f"🚨 公式サイト取得中にエラー: {str(e)}")
-                
+        # TIGETパフォーマーページ以外の自由検索・他チケットサイト・SNS巡回は全面禁止
+        # (LivePocket, TicketDive, X RSS, 公式HP, TIGETキーワード検索はすべて停止)
+        pass
+
         # --- TIGET パフォーマーページ スクレイピング (最優先情報源) ---
         tiget_perf_id = idol.get("tiget_performer_id", "")
         if config.ENABLE_TIGET_SCRAPING and tiget_perf_id:
@@ -101,17 +61,6 @@ def run_marked_idols_collection() -> tuple:
                 idol_events.extend(tiget_perf)
             except Exception as e:
                 print(f"🚨 TIGETパフォーマーページ取得中にエラー: {str(e)}")
-                
-        # --- X RSS スクレイピング ---
-        if config.ENABLE_X_SCRAPING and x_id:
-            try:
-                x_evs = fetch_tweets_via_rss(x_id)
-                # 出演者名を統一
-                for ev in x_evs:
-                    ev["performers"] = name
-                idol_events.extend(x_evs)
-            except Exception as e:
-                print(f"🚨 X(RSS)取得中にエラー: {str(e)}")
                 
         total_scraped += len(idol_events)
         
@@ -128,19 +77,26 @@ def run_marked_idols_collection() -> tuple:
                 
         # データベース保存 ＆ 新着プッシュ通知
         for ev in unique_idol_events:
-            # 過去（今日より前）のイベントはデータベースに保存しない
-            from datetime import datetime
-            today_str = datetime.today().strftime("%Y-%m-%d")
+            # 過去（今日より前）のイベントはデータベースに保存しない (JST基準)
+            today_str = datetime.now(JST).strftime("%Y-%m-%d")
             if ev.get("date", "") < today_str:
                 print(f"⏭️ 過去イベント（保存スキップ）: {ev['title']} ({ev['date']})")
+                continue
+                
+            # 一覧ページURLはイベント特定ができないため除外 (全面禁止ルール適用)
+            from scraper.utils import is_generic_list_url
+            if is_generic_list_url(ev.get("url", "")):
+                print(f"⏭️ 一覧ページURLのためスキップ: {ev['title']} ({ev['url']})")
                 continue
                 
             # データベースへの保存を試みる (URL重複は自動スキップ)
             is_new = db_manager.insert_event(ev)
             
-            # 新潟ローカルシグナル判定
+            # 新潟ローカルシグナル判定の厳密化 (会場名ベースでの新潟判定)
+            from scraper.utils import determine_area
             combined_text = f"{ev.get('title', '')} {ev.get('raw_text', '')}"
-            is_niigata_local = any(kw in combined_text for kw in ["新潟", "ガタ", "古町", "苗場"])
+            is_niigata_local = determine_area(combined_text) == "新潟"
+
             
             if is_new:
                 if is_niigata_local:
@@ -179,79 +135,6 @@ def run_marked_idols_collection() -> tuple:
                 
     return total_scraped, new_notified
 
-def run_general_keywords_collection() -> tuple:
-    """
-    エリア一般イベントの巡回とサイレントDB蓄積の実行
-    戻り値: (検出総数, 新規保存数)
-    """
-    print("\n==================================================")
-    print("🔍 モード2: エリア一般（新潟・東京等）イベントの巡回を開始します")
-    print("   ※新着通知はされず、対話での引き出し用にDBへ保存されます")
-    print("==================================================")
-    
-    total_scraped = 0
-    new_saved = 0
-    
-    for kw in config.GENERAL_SEARCH_KEYWORDS:
-        print(f"\n🔍 検索キーワード: '{kw}'")
-        print(f"──────────────────────────────────────────────────")
-        
-        general_events = []
-        
-        # --- TIGET スクレイピング ---
-        if config.ENABLE_TIGET_SCRAPING:
-            try:
-                tiget = scrape_tiget_events(kw)
-                general_events.extend(tiget)
-            except Exception as e:
-                print(f"🚨 TIGET取得中にエラー: {str(e)}")
-                
-        # --- LivePocket スクレイピング ---
-        if config.ENABLE_LIVEPOCKET_SCRAPING:
-            try:
-                lp = scrape_livepocket_events(kw)
-                general_events.extend(lp)
-            except Exception as e:
-                print(f"🚨 LivePocket取得中にエラー: {str(e)}")
-                
-        # --- TicketDive スクレイピング ---
-        if config.ENABLE_TICKETDIVE_SCRAPING:
-            try:
-                td = scrape_ticketdive_events(kw)
-                general_events.extend(td)
-            except Exception as e:
-                print(f"🚨 TicketDive取得中にエラー: {str(e)}")
-                
-        total_scraped += len(general_events)
-        
-        # セッション内での重複排除
-        unique_gen_events = []
-        seen_urls = set()
-        for ev in general_events:
-            url = ev.get("url", "")
-            if url not in seen_urls:
-                seen_urls.add(url)
-                unique_gen_events.append(ev)
-                
-        # データベース保存 (LINE Notify 通知は行わない)
-        for ev in unique_gen_events:
-            # 過去（今日より前）のイベントはデータベースに保存しない
-            from datetime import datetime
-            today_str = datetime.today().strftime("%Y-%m-%d")
-            if ev.get("date", "") < today_str:
-                continue
-                
-            # 検索キーワードが performers に入っているので、少し分かりやすく整形
-            ev["performers"] = f"合同/イベント ({kw})"
-            
-            is_new = db_manager.insert_event(ev)
-            if is_new:
-                print(f"💾 一般イベント新規蓄積: {ev['title']} ({ev['date']} | {ev['area']})")
-                new_saved += 1
-            else:
-                pass # 一般の重複はログを省略してスッキリさせる
-                
-    return total_scraped, new_saved
 
 def main():
     print("==================================================")
@@ -270,8 +153,8 @@ def main():
     # モード1: 本命マークアイドルの巡回 (通知あり)
     marked_total, marked_new = run_marked_idols_collection()
     
-    # モード2: エリア一般の巡回 (通知なし、DB保存のみ)
-    gen_total, gen_new = run_general_keywords_collection()
+    # モード2: エリア一般の巡回 (全面停止)
+    gen_total, gen_new = 0, 0
     
     end_time = time.time()
     duration = end_time - start_time

@@ -124,10 +124,10 @@ LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET", "")
 PORT = int(os.getenv("PORT", "5000"))
 
 # スクレイピング機能制御 (True / False)
-ENABLE_X_SCRAPING = True
-ENABLE_TIGET_SCRAPING = os.getenv("ENABLE_TIGET_SCRAPING", "True").lower() == "true"
-ENABLE_LIVEPOCKET_SCRAPING = os.getenv("ENABLE_LIVEPOCKET_SCRAPING", "True").lower() == "true"
-ENABLE_TICKETDIVE_SCRAPING = os.getenv("ENABLE_TICKETDIVE_SCRAPING", "True").lower() == "true"
+ENABLE_X_SCRAPING = False
+ENABLE_TIGET_SCRAPING = True
+ENABLE_LIVEPOCKET_SCRAPING = False
+ENABLE_TICKETDIVE_SCRAPING = False
 
 # Nitter RSS base url
 NITTER_BASE_URL = os.getenv("NITTER_BASE_URL", "https://nitter.poast.org").rstrip("/")

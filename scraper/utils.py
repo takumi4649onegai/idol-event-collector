@@ -44,17 +44,15 @@ def determine_area(text: str) -> str:
             return "東京"
             
     # 2. 会場名が明示されていない、または判定が曖昧な場合のフォールバック
-    # 東京の地名や会場情報がある場合は、告知に「新潟」と書かれていても東京イベントとして判定する
+    # 新潟判定は「会場名に新潟要素があるもの」に厳密に限定するため、
+    # ここでのフォールバック（本文全体検索）では「新潟」とは判定しません。
     has_tokyo_signal = any(kw in text_lower for kw in TOKYO_KEYWORDS)
-    has_niigata_signal = any(kw in text_lower for kw in NIIGATA_KEYWORDS)
     
     if is_niigata_venue:
         return "新潟"
         
     if has_tokyo_signal:
         return "東京"
-    elif has_niigata_signal:
-        return "新潟"
         
     return "その他"
 
@@ -207,3 +205,29 @@ def parse_time_and_venue(title: str, raw_text: str, default_area: str = "その�
         venue = re.sub(r'[\(\)（）\-\[\]\{\}]', '', venue).strip()
         
     return start_time, venue
+
+def is_generic_list_url(url: str) -> bool:
+    """
+    URLが個別イベントではなく、雑多な予定が並ぶ一覧・まとめページであるかを判定する。
+    """
+    if not url:
+        return False
+    
+    url_lower = url.lower()
+    
+    # 汎用一覧ページを表すパスパターン
+    list_patterns = [
+        r'/events$', r'/events\?.*',
+        r'/schedule$', r'/schedule\?.*',
+        r'/performers/\d+$', r'/performers/\d+\?.*',
+        r'/artist/\d+$', r'/artist/\d+\?.*',
+        r'/news$', r'/news\?.*',
+        r'/blog$', r'/blog\?.*',
+        r'event/search', r'event/list'
+    ]
+    
+    for pattern in list_patterns:
+        if re.search(pattern, url_lower):
+            return True
+            
+    return False
