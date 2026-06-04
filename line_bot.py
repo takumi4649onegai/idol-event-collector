@@ -147,6 +147,73 @@ def search_web_free_lives(area: str, date_str: str) -> list:
     """Tavily Web Search 機能を無効化（全面禁止ルール適用）"""
     return []
 
+def scrape_tiget_by_state(state_id: int) -> list:
+    """TIGETの都道府県ID指定のイベント一覧から情報をリアルタイムに抽出する"""
+    if not state_id:
+        return []
+    url = f"https://tiget.net/events?q%5Bstate_id_eq%5D={state_id}"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "ja,en-US;q=0.9,en;q=0.8"
+    }
+    found_events = []
+    try:
+        from bs4 import BeautifulSoup
+        from scraper.utils import parse_date, clean_text, determine_area, is_generic_list_url
+        import urllib.parse
+        
+        res = requests.get(url, headers=headers, timeout=10)
+        if res.status_code == 200:
+            soup = BeautifulSoup(res.text, "html.parser")
+            links = soup.find_all("a", href=re.compile(r'^/events/\d+'))
+            seen_urls = set()
+            for link in links:
+                href = link.get("href", "")
+                event_url = f"https://tiget.net{href}"
+                if event_url in seen_urls:
+                    continue
+                seen_urls.add(event_url)
+                
+                # 一覧ページURLは除外
+                if is_generic_list_url(event_url):
+                    continue
+                    
+                # カード親要素の特定
+                container = link
+                for _ in range(4):
+                    parent = container.parent
+                    if parent and parent.name in ["div", "article", "li"]:
+                        container = parent
+                        break
+                
+                container_text = container.get_text(separator=" | ")
+                
+                # タイトルの抽出
+                title = link.get_text().strip()
+                if not title:
+                    heading = container.find(["h2", "h3", "h4", "strong"])
+                    title = heading.get_text().strip() if heading else "無題のイベント"
+                title = clean_text(title)
+                
+                # 日付の抽出
+                date_match = re.search(r'(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})|(\d{1,2}月\d{1,2}日)', container_text)
+                event_date = parse_date(date_match.group(0)) if date_match else parse_date(container_text)
+                
+                # エリア判定
+                area = determine_area(container_text)
+                
+                found_events.append({
+                    "date": event_date,
+                    "area": area,
+                    "title": f"【TIGET】{title}",
+                    "performers": "東京CuteCute",  # デフォルト
+                    "url": event_url,
+                    "raw_text": container_text
+                })
+    except Exception as e:
+        print(f"🚨 TIGETエリアスクレイピング中にエラー: {str(e)}")
+    return found_events
+
     return []
 
     
@@ -466,41 +533,15 @@ def callback():
                 # データベースから条件に合うイベントを検索
                 db_results = query_events(date_str=target_date, area_str=target_area, keyword=target_keyword)
                 
-                # その場でのWeb検索の融合 (日付・地域・今週来週がある場合はフリーライブ検索、キーワードのみの場合はその対象のリアルタイムWeb検索)
+                # 都道府県IDに応じたTIGETエリアスクレイピングを実行（Tavily等の曖昧検索は全面禁止）
                 web_results = []
-                if target_area:
-                    if is_this_week:
-                        # 今週の残り日付表現を生成 (例: "5/30 OR 5/31 OR 5月30日 OR 5月31日")
-                        today = datetime.today()
-                        days_left = 7 - today.weekday()
-                        date_queries = []
-                        for i in range(days_left):
-                            d = today + timedelta(days=i)
-                            date_queries.append(d.strftime("%m/%d"))
-                            date_queries.append(d.strftime("%m月%d日"))
-                        web_date_str = "(" + " OR ".join(date_queries) + ")"
-                        web_results = search_web_free_lives(area=target_area, date_str=web_date_str)
-                    elif is_next_week:
-                        # 来週の日付表現を生成
-                        today = datetime.today()
-                        start_of_next_week = today + timedelta(days=7 - today.weekday())
-                        date_queries = []
-                        for i in range(7):
-                            d = start_of_next_week + timedelta(days=i)
-                            date_queries.append(d.strftime("%m/%d"))
-                            date_queries.append(d.strftime("%m月%d日"))
-                        web_date_str = "(" + " OR ".join(date_queries) + ")"
-                        web_results = search_web_free_lives(area=target_area, date_str=web_date_str)
-                    elif target_date:
-                        web_results = search_web_free_lives(area=target_area, date_str=target_date)
-                
-                # キーワードが指定されている場合は、さらにそのグループ特有 of 最新X告知やWeb情報をリアルタイム補完
-                if target_keyword:
-                    web_kw_results = search_web_keyword(keyword=target_keyword, date_str=target_date)
-                    web_results.extend(web_kw_results)
+                state_id = 15 if target_area == "新潟" else (13 if target_area == "東京" else None)
+                if state_id:
+                    web_results = scrape_tiget_by_state(state_id)
                 
                 # データのマージ (SQLite DBの結果 + Web検索の結果)
                 merged_results = db_results + web_results
+
                 
                 # 具体的な日付が指定されている場合、その日付に完全一致するもの以外を徹底排除 (過去や未来の誤混入防止)
                 if target_date:
@@ -617,10 +658,12 @@ def callback():
                     # 「今日は新潟でなんかある？」など、本日の新潟イベントが0件の際は厳格に1行固定メッセージとする
                     today_str = datetime.now(JST).strftime("%Y-%m-%d")
                     is_today = (target_date == today_str) or ("今日" in user_text or "本日" in user_text or "きょう" in user_text)
-                    is_niigata = (target_area == "新潟") or ("新潟" in user_text)
+                    is_area = (target_area in ["新潟", "東京"]) or ("新潟" in user_text or "東京" in user_text)
+                    current_area = target_area if target_area else ("新潟" if "新潟" in user_text else "東京")
                     
-                    if is_today and is_niigata:
-                        reply_text = f"本日（{today_str}）、新潟で開催される東京CuteCuteのイベントは見つかりませんでした。"
+                    if is_today and is_area:
+                        reply_text = f"本日（{today_str}）、{current_area}で開催されるアイドルイベントは見つかりませんでした。"
+
                     else:
                         reply_text = (
                             f"📅【{header_date}】 📍【{header_area}】{header_kw}\n"
