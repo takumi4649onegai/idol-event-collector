@@ -1,3 +1,15 @@
+import sys
+import io
+
+# Windowsコンソールでのcp932エラー回避 (リアルタイム出力)
+if sys.platform.startswith('win'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except AttributeError:
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', write_through=True)
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', write_through=True)
+
 import json
 import re
 import hmac
@@ -533,14 +545,27 @@ def callback():
                 # データベースから条件に合うイベントを検索
                 db_results = query_events(date_str=target_date, area_str=target_area, keyword=target_keyword)
                 
-                # 都道府県IDに応じたTIGETエリアスクレイピングを実行（Tavily等の曖昧検索は全面禁止）
+                # リアルタイムスクレイピングは実行しない（全面禁止）
                 web_results = []
-                state_id = 15 if target_area == "新潟" else (13 if target_area == "東京" else None)
-                if state_id:
-                    web_results = scrape_tiget_by_state(state_id)
                 
-                # データのマージ (SQLite DBの結果 + Web検索の結果)
+                # データのマージ (SQLite DBの結果のみ)
                 merged_results = db_results + web_results
+                
+                # LINE Bot応答時のコンソールログ出力
+                log_date = target_date
+                if is_this_week:
+                    log_date = "今週"
+                elif is_next_week:
+                    log_date = "来週"
+                elif not target_date:
+                    log_date = "指定なし"
+                
+                print(f"💬 LINE質問受信: {user_text}")
+                print(f"📅 判定日付: {log_date}")
+                print(f"📍 判定地域: {target_area}")
+                print("🗄️ DB検索のみ実行")
+                print("🌐 リアルタイムスクレイピングなし")
+                print(f"🔎 検索結果: {len(merged_results)}件")
 
                 
                 # 具体的な日付が指定されている場合、その日付に完全一致するもの以外を徹底排除 (過去や未来の誤混入防止)
@@ -654,22 +679,39 @@ def callback():
                         f"行きたいイベントは見つかりましたか？🌟"
                     )
                 else:
-                    # 該当なしの場合
-                    # 「今日は新潟でなんかある？」など、本日の新潟イベントが0件の際は厳格に1行固定メッセージとする
-                    today_str = datetime.now(JST).strftime("%Y-%m-%d")
-                    is_today = (target_date == today_str) or ("今日" in user_text or "本日" in user_text or "きょう" in user_text)
-                    is_area = (target_area in ["新潟", "東京"]) or ("新潟" in user_text or "東京" in user_text)
-                    current_area = target_area if target_area else ("新潟" if "新潟" in user_text else "東京")
-                    
-                    if is_today and is_area:
-                        reply_text = f"本日（{today_str}）、{current_area}で開催されるアイドルイベントは見つかりませんでした。"
-
+                    # 該当なしの場合（0件時返答の改善）
+                    # 日付の表記ラベル決定
+                    if is_this_week:
+                        date_label = "今週"
+                    elif is_next_week:
+                        date_label = "来週"
                     else:
-                        reply_text = (
-                            f"📅【{header_date}】 📍【{header_area}】{header_kw}\n"
-                            f"のアイドルイベントは見つかりませんでした😢\n\n"
-                            f"新しくチケットサイトに登録されるか、Web情報が見つかり次第お知らせします！"
-                        )
+                        parsed_date = target_date if target_date else datetime.now(JST).strftime("%Y-%m-%d")
+                        if "今日" in user_text or "本日" in user_text or "きょう" in user_text or target_date == datetime.now(JST).strftime("%Y-%m-%d"):
+                            date_label = f"本日（{parsed_date}）"
+                        elif "明日" in user_text or "あした" in user_text:
+                            date_label = f"明日（{parsed_date}）"
+                        elif "明後日" in user_text or "あさって" in user_text:
+                            date_label = f"明後日（{parsed_date}）"
+                        elif target_date:
+                            date_label = f"{parsed_date}"
+                        else:
+                            date_label = "指定期間"
+
+                    # 地域の表記ラベル決定
+                    area_label = target_area if target_area else ("新潟" if "新潟" in user_text else ("東京" if "東京" in user_text else "指定地域"))
+                    
+                    # キーワード表記ラベル決定
+                    kw_label = f"「{target_keyword}」の" if target_keyword else ""
+
+                    reply_text = (
+                        f"{date_label}、{area_label}で{kw_label}DB登録済みのアイドルイベントは見つかりませんでした。\n\n"
+                        f"確認対象：\n"
+                        f"・保存済みイベントデータ\n"
+                        f"・定期巡回で取得済みのTIGETイベント\n\n"
+                        f"注意：\n"
+                        f"リアルタイム検索ではないため、公式XやTIGET以外の急な告知は未反映の可能性があります。"
+                    )
                 
                 send_reply(reply_token, reply_text)
 
@@ -710,17 +752,6 @@ def sync_all_db_events_to_calendar():
     print(f"📊 [Startup] Googleカレンダー同期完了: {sync_count} 件のイベントを処理しました。")
 
 if __name__ == "__main__":
-    import sys
-    import io
-    # Windowsコンソールでのcp932エラー回避 (リアルタイム出力)
-    if sys.platform.startswith('win'):
-        try:
-            sys.stdout.reconfigure(encoding='utf-8')
-            sys.stderr.reconfigure(encoding='utf-8')
-        except AttributeError:
-            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', write_through=True)
-            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', write_through=True)
-        
     # バックグラウンドスレッドでGoogleカレンダー全体同期を走らせる
     import threading
     threading.Thread(target=sync_all_db_events_to_calendar, daemon=True).start()
