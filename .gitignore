@@ -7,4 +7,10 @@ __pycache__/
 .vscode/
 venv/
 .idea/
-
+# SQLite database files
+events.db
+events.db.bak
+*.db
+*.db.bak
+*.sqlite
+*.sqlite3
