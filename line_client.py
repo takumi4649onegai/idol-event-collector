@@ -80,11 +80,14 @@ def send_line_push_notification(event: dict) -> bool:
     if event_url and not event_url.startswith("local_id:"):
         url_section = f"\n📲 公式チケット・告知詳細:\n🔗 {event_url}"
         
+    source_name = event.get("source") or "Unknown"
+    
     message_text = (
         f"{header}\n"
         f"🗓️ 日時：{display_date}{time_display}\n"
         f"🎵 イベント名：{clean_title}\n"
         f"📍 会場：{venue}\n"
+        f"情報源：{source_name}\n"
         f"────────────────────"
         f"{url_section}"
     )

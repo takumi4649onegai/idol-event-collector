@@ -13,11 +13,11 @@ def get_connection():
     return conn
 
 def init_db():
-    """データベースとテーブルの初期化"""
+    """データベースとテーブルの初期化、及びマイグレーション"""
     conn = get_connection()
     cursor = conn.cursor()
     
-    # イベントテーブルの作成
+    # イベントテーブルの作成（新規作成時は source も含む）
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS events (
             url TEXT PRIMARY KEY,
@@ -26,10 +26,26 @@ def init_db():
             area TEXT NOT NULL,
             performers TEXT NOT NULL,
             raw_text TEXT,
+            source TEXT DEFAULT 'Unknown',
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
     conn.commit()
+    
+    # 既存DBマイグレーション: source カラムが存在するかチェックし、無ければ追加する
+    try:
+        cursor.execute("PRAGMA table_info(events)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if "source" not in columns:
+            print("[DB] Migrating database: adding 'source' column...")
+            cursor.execute("ALTER TABLE events ADD COLUMN source TEXT DEFAULT 'Unknown'")
+            conn.commit()
+            print("[DB] Migration completed: 'source' column added successfully.")
+        else:
+            print("[DB] Database already has 'source' column. Skip migration.")
+    except Exception as e:
+        print(f"🚨 データベース移行中にエラーが発生しました: {str(e)}")
+        
     conn.close()
     print("[DB] SQLite database initialized successfully.")
 
@@ -45,6 +61,7 @@ def insert_event(event: dict) -> bool:
     area = event.get("area", "その他")
     performers = event.get("performers", "")
     raw_text = event.get("raw_text", "")
+    source = event.get("source") or "Unknown"
     
     # URLが空の場合は、重複防止のためタイトル・出演者・日付から一意なIDを生成
     if not url:
@@ -56,9 +73,9 @@ def insert_event(event: dict) -> bool:
     try:
         # INSERT OR IGNORE を用いて、主キー(url)の重複時は何もしない
         cursor.execute("""
-            INSERT OR IGNORE INTO events (url, title, date, area, performers, raw_text)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (url, title, date, area, performers, raw_text))
+            INSERT OR IGNORE INTO events (url, title, date, area, performers, raw_text, source)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (url, title, date, area, performers, raw_text, source))
         
         conn.commit()
         
@@ -118,13 +135,18 @@ def query_events(date_str: str = None, area_str: str = None, keyword: str = None
         
         events = []
         for row in rows:
+            source_val = "Unknown"
+            if "source" in row.keys():
+                source_val = row["source"] or "Unknown"
+                
             events.append({
                 "url": row["url"],
                 "title": row["title"],
                 "date": row["date"],
                 "area": row["area"],
                 "performers": row["performers"],
-                "raw_text": row["raw_text"]
+                "raw_text": row["raw_text"],
+                "source": source_val
             })
         return events
     except Exception as e:

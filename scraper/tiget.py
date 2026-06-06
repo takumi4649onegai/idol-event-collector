@@ -89,7 +89,8 @@ def scrape_tiget_events(query: str) -> list:
             "area": area,
             "title": f"【TIGET】{title}",
             "performers": query,
-            "url": event_url
+            "url": event_url,
+            "source": "TIGET"
         })
         
     print(f"✅ TIGETから {len(found_events)} 件のイベントを抽出しました。")
@@ -177,7 +178,8 @@ def scrape_tiget_performer(performer_id: str, default_performers: str = "") -> l
             "title": f"【TIGET】{title}",
             "performers": performers if performers else default_performers,
             "url": url,
-            "raw_text": div.get_text(separator=" | ")
+            "raw_text": div.get_text(separator=" | "),
+            "source": "TIGET"
         })
         
     print(f"✅ TIGETパフォーマーページから {len(found_events)} 件 of イベントを抽出しました。")

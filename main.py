@@ -98,10 +98,11 @@ def run_marked_idols_collection() -> tuple:
             is_niigata_local = determine_area(combined_text) == "新潟"
 
             
+            source_val = ev.get("source") or "Unknown"
             if is_new:
-                print(f"✅ 新規イベント登録: {ev['title']} ({ev['date']})")
+                print(f"✅ 新規イベント登録: {ev['title']} ({ev['date']}) / source={source_val}")
                 if is_niigata_local:
-                    print(f"📩 LINE通知送信: {ev['title']} ({ev['date']})")
+                    print(f"📩 LINE通知送信: {ev['title']} ({ev['date']}) / source={source_val}")
                     line_client.send_line_push_notification(ev)
                     from calendar_client import add_to_google_calendar
                     add_to_google_calendar(ev)
@@ -109,19 +110,19 @@ def run_marked_idols_collection() -> tuple:
                 else:
                     from db_manager import is_duplicate_by_dedupe_key
                     if not is_duplicate_by_dedupe_key(ev):
-                        print(f"📩 LINE通知送信: {ev['title']} ({ev['date']})")
+                        print(f"📩 LINE通知送信: {ev['title']} ({ev['date']}) / source={source_val}")
                         line_client.send_line_push_notification(ev)
                         from calendar_client import add_to_google_calendar
                         add_to_google_calendar(ev)
                         new_notified += 1
                     else:
-                        print(f"🔕 既存イベントのためLINE通知なし: {ev['title']} ({ev['date']})")
+                        print(f"🔕 既存イベントのためLINE通知なし: {ev['title']} ({ev['date']}) / source={source_val}")
                 
                 # APIレート制限の回避ウェイト
                 time.sleep(1.5)
             else:
-                print(f"⏭️ 既存イベントのためスキップ: {ev['title']} ({ev['date']})")
-                print(f"🔕 既存イベントのためLINE通知なし: {ev['title']} ({ev['date']})")
+                print(f"⏭️ 既存イベントのためスキップ: {ev['title']} ({ev['date']}) / source={source_val}")
+                print(f"🔕 既存イベントのためLINE通知なし: {ev['title']} ({ev['date']}) / source={source_val}")
                 
     return total_scraped, new_notified
 

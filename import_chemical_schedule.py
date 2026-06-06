@@ -89,7 +89,8 @@ def import_chemical_schedule() -> dict:
                 "date": date_str,
                 "area": area,
                 "performers": "ケミカル⇄リアクション",
-                "raw_text": f"ケミカル⇄リアクション 公式Xスケジュール\n日付: {current_month}月{day}日\n場所: {area_name}\n備考: {notes}"
+                "raw_text": f"ケミカル⇄リアクション 公式Xスケジュール\n日付: {current_month}月{day}日\n場所: {area_name}\n備考: {notes}",
+                "source": "X"
             }
             events.append(event)
 

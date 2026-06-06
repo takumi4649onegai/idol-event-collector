@@ -102,10 +102,10 @@ def parse_user_message(text: str) -> tuple:
             # 今年を補完して YYYY-MM-DD 形式に成形
             current_year = today.year
             try:
-                target_date = datetime(current_year, month, day)
+                target_date = datetime(current_year, month, day, tzinfo=JST)
                 # もし指定された日付が既に過去であり、かつ今日より大幅に前の場合は翌年とみなす（年越しの境界対策）
                 if target_date < today - timedelta(days=30):
-                    target_date = datetime(current_year + 1, month, day)
+                    target_date = datetime(current_year + 1, month, day, tzinfo=JST)
                 date_str = target_date.strftime("%Y-%m-%d")
             except ValueError:
                 pass # 無効な日付（例: 2月30日など）の場合は無視
@@ -640,9 +640,10 @@ def callback():
                             link_idx += 1
                             
                         perf_part = f" (👥 {ev['performers']})" if ev['performers'] and not target_keyword else ""
+                        source_val = ev.get("source") or "Unknown"
                         
                         # 行の作成
-                        event_line = f"・{date_display} | {clean_ev_title}{perf_part}{url_part}"
+                        event_line = f"・{date_display} | {clean_ev_title}{perf_part} (情報源: {source_val}){url_part}"
                         
                         if is_ticket:
                             ticket_list_text.append(event_line)
