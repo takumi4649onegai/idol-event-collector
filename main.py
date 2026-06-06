@@ -99,39 +99,29 @@ def run_marked_idols_collection() -> tuple:
 
             
             if is_new:
+                print(f"✅ 新規イベント登録: {ev['title']} ({ev['date']})")
                 if is_niigata_local:
-                    # 1. 新潟ローカルの場合、デデュープ重複判定をバイパスして最優先でLINE通知＆カレンダー同期！
-                    print(f"🚨 新潟ローカルシグナル検知 (最優先プッシュ通知): {ev['title']} ({ev['date']})")
+                    print(f"📩 LINE通知送信: {ev['title']} ({ev['date']})")
                     line_client.send_line_push_notification(ev)
                     from calendar_client import add_to_google_calendar
                     add_to_google_calendar(ev)
                     new_notified += 1
                 else:
-                    # 2. 通常イベントの場合、時間・会場による重複排除(デデュープ)を行う
                     from db_manager import is_duplicate_by_dedupe_key
                     if not is_duplicate_by_dedupe_key(ev):
-                        print(f"🆕 本命マーク新着検知 (プッシュ通知): {ev['title']} ({ev['date']})")
+                        print(f"📩 LINE通知送信: {ev['title']} ({ev['date']})")
                         line_client.send_line_push_notification(ev)
                         from calendar_client import add_to_google_calendar
                         add_to_google_calendar(ev)
                         new_notified += 1
                     else:
-                        print(f"⏭️ 同一予定を別ソースで検知済みの為スキップ (デデュープ): {ev['title']} ({ev['date']})")
+                        print(f"🔕 既存イベントのためLINE通知なし: {ev['title']} ({ev['date']})")
                 
                 # APIレート制限の回避ウェイト
                 time.sleep(1.5)
             else:
-                # 完全に同一のURLなどがすでにデータベースに存在する場合でも、
-                # 新潟ローカルシグナルがある場合は、見逃し厳禁速報として毎回確実にカレンダー登録/同期などを実施
-                if is_niigata_local:
-                    print(f"🚨 新潟ローカル検知 (既知データですが最優先でLINE通知): {ev['title']} ({ev['date']})")
-                    line_client.send_line_push_notification(ev)
-                    from calendar_client import add_to_google_calendar
-                    add_to_google_calendar(ev)
-                    new_notified += 1
-                    time.sleep(1.5)
-                else:
-                    print(f"⏭️ 既知（通知スキップ）: {ev['title']} ({ev['date']})")
+                print(f"⏭️ 既存イベントのためスキップ: {ev['title']} ({ev['date']})")
+                print(f"🔕 既存イベントのためLINE通知なし: {ev['title']} ({ev['date']})")
                 
     return total_scraped, new_notified
 
