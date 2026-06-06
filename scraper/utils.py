@@ -1,16 +1,78 @@
 import re
 from datetime import datetime
 
-# 地域判定用のキーワード辞書 (すべて小文字で判定)
-NIIGATA_KEYWORDS = [
-    "新潟", "niigata", "長岡", "三条", "上越", "朱鷺メッセ", "新潟lott", "nexus", 
-    "万代", "古町", "golds", "riverst", "nexs", "新潟駅", "柳都"
+# 新潟の具体的なライブ会場・商業施設・リリイベ会場など (誤判定しにくい特定キーワード)
+NIIGATA_SPECIFIC_KEYWORDS = [
+    "riverst",
+    "club riverst",
+    "golden pigs",
+    "goldenpigs",
+    "新潟golden pigs",
+    "新潟riverst",
+    "新潟club riverst",
+    "柳都showcase",
+    "柳都show!case!!",
+    "柳都オレンジスタジアム",
+    "niigata lots",
+    "新潟lots",
+    "nexs niigata",
+    "nexs",
+    "ジョイアミーア",
+    "gioiamia",
+    "gioia mia",
+    "朱鷺メッセ",
+    "新潟県民会館",
+    "新潟市民芸術文化会館",
+    "りゅーとぴあ",
+    "新潟日報メディアシップ",
+    "万代島多目的広場",
+    "イオンモール新潟亀田インター",
+    "イオン新潟亀田",
+    "新潟亀田インター",
+    "亀田インター",
+    "タワーレコード新潟店",
+    "タワレコ新潟",
+    "tower records 新潟",
+    "tower records niigata",
+    "イオンモール新発田",
+    "イオン新発田",
+    "イオンモール新潟南",
+    "新潟南",
+    "万代シテイ",
+    "万代シティ",
+    "万代シテイビルボードプレイス",
+    "ビルボードプレイス",
+    "bp2",
+    "ラブラ万代",
+    "ラブラ2",
+    "古町ルフル",
+    "cocolo新潟"
 ]
+
+# 新潟の広域・地域名系キーワード (他県との併記時に誤判定しやすいもの)
+NIIGATA_GENERAL_KEYWORDS = [
+    "新潟市",
+    "長岡市",
+    "三条市",
+    "上越市",
+    "新発田市",
+    "燕市",
+    "柏崎市",
+    "古町",
+    "万代",
+    "新潟駅",
+    "新潟駅南口",
+    "新潟駅前",
+    "新潟", "niigata", "長岡", "三条", "上越", "nexus", "柳都"
+]
+
+# 全新潟キーワード統合
+NIIGATA_KEYWORDS = NIIGATA_SPECIFIC_KEYWORDS + NIIGATA_GENERAL_KEYWORDS
 
 TOKYO_KEYWORDS = [
     "東京", "tokyo", "渋谷", "新宿", "池袋", "秋葉原", "アキバ", "品川", "六本木", 
     "恵比寿", "お台場", "豊洲", "赤坂", "原宿", "上野", "中野", "吉祥寺", "立川", 
-    "八王子", "蒲田", "浅草", "目黒", "五反田", "新木場", "Zepp", "ドーム", "ホール",
+    "八王子", "蒲田", "浅草", "目黒", "五反田", "新木場", "zepp", "ドーム", "ホール",
     "下北沢", "代々木", "銀座", "有楽町", "大手町"
 ]
 
@@ -20,7 +82,7 @@ def determine_area(text: str) -> str:
     その会場名に新潟または東京の要素があるかを厳密に判定してエリアを割り当てる。
     """
     if not text:
-        return "other" if False else "その他"
+        return "その他"
         
     text_lower = text.lower()
     
@@ -33,26 +95,32 @@ def determine_area(text: str) -> str:
         venue = re.split(r'(?:出演|開場|開演|チケット|予約|主催|企画|料金|・|\|)', venue)[0].strip()
         venue = re.sub(r'[\(\)（）\-\[\]\{\}！!？?]', '', venue).strip()
     
-    # 新潟の会場要素判定
-    is_niigata_venue = False
+    # 新潟・東京のキーワード判定
+    # A. 抽出された会場名での判定
     if venue:
-        is_niigata_venue = any(keyword in venue for keyword in NIIGATA_KEYWORDS)
-        is_tokyo_venue = any(keyword in venue for keyword in TOKYO_KEYWORDS)
+        is_niigata_venue = any(kw.lower() in venue for kw in NIIGATA_KEYWORDS)
+        is_tokyo_venue = any(kw.lower() in venue for kw in TOKYO_KEYWORDS)
+        
+        # 新潟会場名が明確に含まれている場合は、新潟優先
         if is_niigata_venue and not is_tokyo_venue:
             return "新潟"
         if is_tokyo_venue:
             return "東京"
             
-    # 2. 会場名が明示されていない、または判定が曖昧な場合のフォールバック
-    # 新潟判定は「会場名に新潟要素があるもの」に厳密に限定するため、
-    # ここでのフォールバック（本文全体検索）では「新潟」とは判定しません。
-    has_tokyo_signal = any(kw in text_lower for kw in TOKYO_KEYWORDS)
+    # B. 会場名が明示されていない、または判定が曖昧な場合のフォールバック（本文全体の解析）
+    has_specific_niigata = any(kw.lower() in text_lower for kw in NIIGATA_SPECIFIC_KEYWORDS)
+    has_general_niigata = any(kw.lower() in text_lower for kw in NIIGATA_GENERAL_KEYWORDS)
+    has_tokyo_signal = any(kw.lower() in text_lower for kw in TOKYO_KEYWORDS)
     
-    if is_niigata_venue:
+    # 本文中に新潟の特定会場が明確に含まれている場合は新潟優先
+    if has_specific_niigata:
         return "新潟"
         
     if has_tokyo_signal:
         return "東京"
+        
+    if has_general_niigata:
+        return "新潟"
         
     return "その他"
 
