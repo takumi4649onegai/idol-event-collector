@@ -239,11 +239,17 @@ def is_duplicate_by_dedupe_key(event: dict) -> bool:
     from scraper.utils import parse_time_and_venue
     
     # 判定対象イベントのキーを生成
+    target_url = event.get("url", "")
     target_date = event.get("date", "")
     target_title = event.get("title", "")
     target_raw = event.get("raw_text", "")
     target_area = event.get("area", "その他")
     
+    # URLが空の場合に db_manager.insert_event 内で行うキー生成と同じロジックでフォールバック
+    if not target_url:
+        performers = event.get("performers", "")
+        target_url = f"local_id:{performers}:{target_title}:{target_date}"
+        
     target_time, target_venue = parse_time_and_venue(target_title, target_raw, target_area)
     target_key = f"{target_date}_{target_time}_{target_venue}"
     
@@ -256,11 +262,16 @@ def is_duplicate_by_dedupe_key(event: dict) -> bool:
     placeholder = "%s" if database_url else "?"
     
     try:
-        # 未来のイベントを全取得して走査
-        cursor.execute(f"SELECT title, date, area, raw_text FROM events WHERE date >= {placeholder}", (today_str,))
+        # 未来のイベントを全取得して走査 (URLも取得して重複判定の除外に使用)
+        cursor.execute(f"SELECT url, title, date, area, raw_text FROM events WHERE date >= {placeholder}", (today_str,))
         rows = cursor.fetchall()
         
         for row in rows:
+            r_url = row["url"]
+            # 自分自身（同一URLのレコード）は重複排除の対象外とする
+            if r_url == target_url:
+                continue
+                
             r_title = row["title"]
             r_raw = row["raw_text"]
             r_area = row["area"]

@@ -1,41 +1,55 @@
-# SQLiteからNeon PostgreSQLへの移行 (Phase 5)
+# LivePocketスクレイパーの復活と重複通知の防止 (Phase 6)
 
-本プロジェクトのデータベースを SQLite から Neon PostgreSQL に移行し、ローカル開発環境では引き続き SQLite を利用可能なハイブリッド構成を実現します。また、GitHub Actions や Render.com などの本番環境では、環境変数 `DATABASE_URL` を利用して PostgreSQL に自動接続します。
+本フェーズでは、停止中だった LivePocket スクレイパーを安全に復活させます。また、TIGETとLivePocketの双方に同一のイベントが登録された際に、LINE通知が重複して配信されるスパム問題を防ぐため、重複排除（デデュープ）処理を強化し、新潟イベントであっても重複時は通知をスキップするように動作を厳密化します。
 
 ## User Review Required
 
-> [!NOTE]
-> **本番データベース (Neon PostgreSQL) 接続の前提**
-> ユーザー様側で Neon PostgreSQL 側のプロジェクト作成、および接続用 URL（`DATABASE_URL`）の取得と環境変数・シークレットへの登録（Render.com / GitHub Actions）が完了している前提で動作します。
-
 > [!IMPORTANT]
-> **SSL接続の自動付加**
-> Neon PostgreSQL は SSL 接続を必須とするため、コード内で `DATABASE_URL` に `sslmode=require` が指定されていない場合は、自動で末尾に付加する処理を追加しています。
+> **新潟イベント重複通知バイパスの廃止**
+> 従来、新潟エリアのイベント（`is_niigata_local = True`）は重複排除判定（`is_duplicate_by_dedupe_key`）をバイパスして即座に通知する仕様になっていました。しかし、LivePocket を有効化すると、TIGETとLivePocketの両方で販売される同じ新潟イベントで二重通知（スパム）が発生するため、**新潟イベントであっても重複している場合は通知をスキップする**よう `main.py` の条件分岐を統一します。
+
+> [!WARNING]
+> **is_duplicate_by_dedupe_key の論理バグ修正**
+> 既存の `is_duplicate_by_dedupe_key` は、自身（今回挿入されたばかりの新規イベント）もクエリ結果に含んでしまい、自身と日時・会場が一致することから**常に重複（True）と判定されるバグ**を抱えていました。
+> 本計画で、同一URLを持つレコード（自身）を判定ループから除外するよう修正します。これにより、通常イベント（東京等）の通知が正しく配信されるようになります。
 
 ---
 
 ## Proposed Changes
 
-### Database & Scraper Logic
+### Configuration
 
-#### [MODIFY] [db_manager.py](file:///C:/Users/takum/.gemini/antigravity/scratch/idol-event-collector/db_manager.py)
-- `get_connection()`: `DATABASE_URL` の有無で接続先を動的切り替え。SSL接続オプションを Neon に適合するよう自動調整。
-- `get_cursor()`: PostgreSQL 接続時には `psycopg2.extras.DictCursor` を用いて、SQLite 同様に辞書ライク（カラム名指定）でデータ行にアクセスできるように抽象化。
-- `init_db()`: PostgreSQL 用の `CREATE TABLE` スキーマおよび、`information_schema.columns` を使った `source` カラム自動追加マイグレーションに対応。
-- `insert_event()`: PostgreSQL の `ON CONFLICT (url) DO NOTHING` と `%s` プレースホルダー、SQLite の `INSERT OR IGNORE` と `?` プレースホルダーを動的切り替え。
-- `query_events()`: プレースホルダーを接続タイプにあわせて動的に `%s` または `?` に設定。行アクセスのエラーハンドリング強化。
-- `is_duplicate_by_dedupe_key()`: プレースホルダーの動的切り替えを実装。
-
-#### [MODIFY] [requirements.txt](file:///C:/Users/takum/.gemini/antigravity/scratch/idol-event-collector/requirements.txt)
-- `psycopg2-binary>=2.9.0` を追加し、Python から PostgreSQL への接続ドライバをインストール。
+#### [MODIFY] [config.py](file:///C:/Users/takum/.gemini/antigravity/scratch/idol-event-collector/config.py)
+- `ENABLE_LIVEPOCKET_SCRAPING = True` に変更し、LivePocketの巡回機能を有効化します。
 
 ---
 
-### CI/CD Workflow
+### Scraper Logic
 
-#### [MODIFY] [run_collector.yml](file:///C:/Users/takum/.gemini/antigravity/scratch/idol-event-collector/.github/workflows/run_collector.yml)
-- クローラー実行時の環境変数に `DATABASE_URL: ${{ secrets.DATABASE_URL }}` を追加。
-- 従来行っていた `events.db` ファイルの Git 自動コミットおよびプッシュ処理（Git-pushステップ）を完全に削除。
+#### [MODIFY] [livepocket.py](file:///C:/Users/takum/.gemini/antigravity/scratch/idol-event-collector/scraper/livepocket.py)
+- `scrape_livepocket_events(query)` にて、返却するイベント情報辞書に `"source": "LivePocket"` および `"raw_text": container_text` を追加します。
+
+---
+
+### Database Manager
+
+#### [MODIFY] [db_manager.py](file:///C:/Users/takum/.gemini/antigravity/scratch/idol-event-collector/db_manager.py)
+- `is_duplicate_by_dedupe_key(event)` を修正：
+  - `SELECT` 文で `url` カラムもあわせて取得。
+  - ループ内で `row["url"] == target_url` の場合は `continue` でスキップするようにし、自身とのマッチングによる誤判定を回避します。
+
+---
+
+### Main Loop & Duplication Check
+
+#### [MODIFY] [main.py](file:///C:/Users/takum/.gemini/antigravity/scratch/idol-event-collector/main.py)
+- `run_marked_idols_collection()` 内のLivePocketスクレイピング呼び出し部を有効化。
+  - エラー発生時もクローラー全体を巻き込んで停止しないよう、`try-except` で保護しエラーログを出力。
+- 巡回時のコンソール出力ログに、指定された以下のフォーマットを追加・適用：
+  - `🔍 LivePocket検索開始: {name}`
+  - `✅ LivePocket取得件数: {count}件`
+- 新着イベントの通知判定ロジックを修正：
+  - `is_niigata_local` による通知バイパス処理を廃止し、すべての地域において `is_duplicate_by_dedupe_key(ev)` を適用して、未通知の新規イベントのみLINE通知 & Googleカレンダー同期を行います。
 
 ---
 
@@ -43,13 +57,13 @@
 
 ### Automated Tests
 
-1. **SQLite 接続の動作検証**
-   - 既存のテストスクリプト `test_source_management.py` を実行し、SQLite モードにおいてマイグレーション、データ追加、重複排除、検索、および LINE 通知テキスト生成・Bot 応答生成が正常に動作することを確認します。
-   - コマンド: `py C:\Users\takum\.gemini\antigravity\brain\379fd0ad-b37b-4fa3-b2c6-8731c49be4cc\scratch\test_source_management.py`
+1. **重複排除ロジックの修正検証**
+   - 新たに `test_livepocket_resurrection.py` を作成し、以下を検証します。
+     - `is_duplicate_by_dedupe_key` が自身を除外して正しく新規イベントを検知できること。
+     - 異なるURLだが同一日時・会場のイベントが来た場合、2枚目は `is_duplicate_by_dedupe_key` で重複と判定されること。
+     - 新潟イベントであっても重複時は通知フラグが立たないこと。
+   - コマンド: `py C:\Users\takum\.gemini\antigravity\brain\379fd0ad-b37b-4fa3-b2c6-8731c49be4cc\scratch\test_livepocket_resurrection.py`
 
-2. **PostgreSQL 接続（モック経由）の動作検証**
-   - 新規テストスクリプト `test_postgres_mode.py` を実行し、`DATABASE_URL` がセットされた PostgreSQL モードにおいてテーブル作成（`init_db`）、データ追加（`insert_event`）、検索（`query_events`）が正しい PostgreSQL 向け SQL 文（`ON CONFLICT`, `%s` プレースホルダーなど）で実行されることをモックを用いて検証します。
-   - コマンド: `py C:\Users\takum\.gemini\antigravity\brain\379fd0ad-b37b-4fa3-b2c6-8731c49be4cc\scratch\test_postgres_mode.py`
-
-### Manual Verification
-- GitHub にコードをプッシュ後、GitHub Actions および Render.com 上でクローラーと LINE Bot が Neon PostgreSQL の `events` テーブルにアクセスし、正常にデータが登録・検索できることを確認します。
+2. **LivePocket スクレイパーの単体検証**
+   - `scraper/livepocket.py` を直接実行し、LivePocket から正常に `"source": "LivePocket"` および `"raw_text"` を含むイベントリストが返されることを確認します。
+   - コマンド: `py scraper/livepocket.py`

@@ -59,3 +59,22 @@
   - [x] ローカル環境での SQLite モード動作確認
   - [x] ローカル環境での PostgreSQL モード動作確認 (テストスクリプト作成 & テスト用DBへの接続検証)
   - [x] Git コミット & プッシュ (Render.com へのデプロイ)
+
+## Phase 6: LivePocketスクレイパー復活と重複通知防止 (完了)
+- [x] `db_manager.py` の `is_duplicate_by_dedupe_key()` の論理バグ修正
+  - [x] `SELECT` 項目に `url` を追加し、同一URLの自分自身を重複判定から除外
+- [x] `main.py` の重複通知判定ロジックの修正
+  - [x] 新潟エリア判定による通知バイパスの廃止
+  - [x] すべての地域において `is_duplicate_by_dedupe_key()` を適用して通知を制御
+- [x] `scraper/livepocket.py` の修正
+  - [x] 返却辞書に `"source": "LivePocket"` と `"raw_text": container_text` を追加
+- [x] `config.py` の修正
+  - [x] `ENABLE_LIVEPOCKET_SCRAPING = True` に設定
+- [x] `main.py` への巡回ロジックの追加
+  - [x] `ENABLE_LIVEPOCKET_SCRAPING` によるLivePocket巡回を追加
+  - [x] `try-except` による安全なエラーハンドリングと指定ログ出力の追加
+- [x] 動作確認・検証
+  - [x] 新たに `test_livepocket_resurrection.py` を作成し、重複排除とLivePocket連携の動作を検証
+  - [x] テスト結果確認（SQLiteモードおよびPostgreSQLモード）
+- [x] Git コミット & プッシュ (Render.com へのデプロイ)
+

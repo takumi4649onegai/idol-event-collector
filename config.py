@@ -126,7 +126,7 @@ PORT = int(os.getenv("PORT", "5000"))
 # スクレイピング機能制御 (True / False)
 ENABLE_X_SCRAPING = False
 ENABLE_TIGET_SCRAPING = True
-ENABLE_LIVEPOCKET_SCRAPING = False
+ENABLE_LIVEPOCKET_SCRAPING = True
 ENABLE_TICKETDIVE_SCRAPING = False
 
 # Nitter RSS base url

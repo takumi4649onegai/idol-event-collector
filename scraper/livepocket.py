@@ -127,7 +127,9 @@ def scrape_livepocket_events(query: str) -> list:
             "area": area,
             "title": f"【LivePocket】{title}",
             "performers": query,
-            "url": event_url
+            "url": event_url,
+            "raw_text": container_text,
+            "source": "LivePocket"
         })
         
     print(f"✅ LivePocketから {len(found_events)} 件のイベントを抽出しました。")

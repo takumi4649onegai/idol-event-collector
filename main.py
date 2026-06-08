@@ -49,9 +49,17 @@ def run_marked_idols_collection() -> tuple:
         elif name == "Red radiance":
             ticket_search_words = ["Red radiance", "Redradiance"]
         
-        # TIGETパフォーマーページ以外の自由検索・他チケットサイト・SNS巡回は全面禁止
-        # (LivePocket, TicketDive, X RSS, 公式HP, TIGETキーワード検索はすべて停止)
-        pass
+        # --- LivePocket スクレイピング (復活) ---
+        if config.ENABLE_LIVEPOCKET_SCRAPING:
+            from scraper.livepocket import scrape_livepocket_events
+            for word in ticket_search_words:
+                print(f"🔍 LivePocket検索開始: {word}")
+                try:
+                    lp_events = scrape_livepocket_events(word)
+                    print(f"✅ LivePocket取得件数: {len(lp_events)}件")
+                    idol_events.extend(lp_events)
+                except Exception as e:
+                    print(f"🚨 LivePocket取得中にエラー ({word}): {str(e)}")
 
         # --- TIGET パフォーマーページ スクレイピング (最優先情報源) ---
         tiget_perf_id = idol.get("tiget_performer_id", "")
@@ -101,28 +109,23 @@ def run_marked_idols_collection() -> tuple:
             source_val = ev.get("source") or "Unknown"
             if is_new:
                 print(f"✅ 新規イベント登録: {ev['title']} ({ev['date']}) / source={source_val}")
-                if is_niigata_local:
+                
+                # 重複排除チェック（新潟エリア含めすべての地域で共通実行）
+                from db_manager import is_duplicate_by_dedupe_key
+                if not is_duplicate_by_dedupe_key(ev):
                     print(f"📩 LINE通知送信: {ev['title']} ({ev['date']}) / source={source_val}")
                     line_client.send_line_push_notification(ev)
                     from calendar_client import add_to_google_calendar
                     add_to_google_calendar(ev)
                     new_notified += 1
                 else:
-                    from db_manager import is_duplicate_by_dedupe_key
-                    if not is_duplicate_by_dedupe_key(ev):
-                        print(f"📩 LINE通知送信: {ev['title']} ({ev['date']}) / source={source_val}")
-                        line_client.send_line_push_notification(ev)
-                        from calendar_client import add_to_google_calendar
-                        add_to_google_calendar(ev)
-                        new_notified += 1
-                    else:
-                        print(f"🔕 既存イベントのためLINE通知なし: {ev['title']} ({ev['date']}) / source={source_val}")
+                    print(f"🔕 重複または既存イベントのためLINE通知なし: {ev['title']} ({ev['date']}) / source={source_val}")
                 
                 # APIレート制限の回避ウェイト
                 time.sleep(1.5)
             else:
-                print(f"⏭️ 既存イベントのためスキップ: {ev['title']} ({ev['date']}) / source={source_val}")
-                print(f"🔕 既存イベントのためLINE通知なし: {ev['title']} ({ev['date']}) / source={source_val}")
+                print(f"⏭️ 重複イベントのためスキップ: {ev['title']} ({ev['date']}) / source={source_val}")
+                print(f"🔕 重複または既存イベントのためLINE通知なし: {ev['title']} ({ev['date']}) / source={source_val}")
                 
     return total_scraped, new_notified
 
