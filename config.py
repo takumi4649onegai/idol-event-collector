@@ -26,6 +26,15 @@ BASE_MARKING_IDOLS = [
             "柚谷双葉", "柚谷 双葉",
             "有栖れる", "有栖 れる"
         ],
+        "livepocket_search_queries": [
+            "東京CuteCute",
+            "東京Cute",
+            "CuteCute",
+            "Tokyo CuteCute",
+            "TOKYO CuteCute",
+            "東京キュートキュート",
+            "キュートキュート"
+        ],
         "x_id": "TOKYO_Cute2",
         "tiget_performer_id": "4483"
     },
@@ -43,6 +52,16 @@ BASE_MARKING_IDOLS = [
             "小宮山さら", "小宮山 さら",
             "柚谷双葉", "柚谷 双葉",
             "西萌葉", "西 萌葉"
+        ],
+        "livepocket_search_queries": [
+            "Red radiance",
+            "Red Radiance",
+            "RedRadiance",
+            "Redradiance",
+            "RED RADIANCE",
+            "レッドラディアンス",
+            "レッド ラディアンス",
+            "レドラ"
         ],
         "x_id": "gce_rr",
         "tiget_performer_id": "192837"

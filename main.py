@@ -42,21 +42,45 @@ def run_marked_idols_collection() -> tuple:
         
         idol_events = []
         
-        # チケットサイト用は、メンバー名での部分一致ノイズ（Chara等）を避けるため、グループ名のみで検索します
-        ticket_search_words = [name]
-        if name == "東京CuteCute":
-            ticket_search_words = ["東京CuteCute", "東京Cute"]
-        elif name == "Red radiance":
-            ticket_search_words = ["Red radiance", "Redradiance"]
+        # LivePocket用の検索ワードの組み立て
+        group_queries = idol.get("livepocket_search_queries", [name])
         
-        # --- LivePocket スクレイピング (復活) ---
+        # メンバー名による検索ワード（生誕祭用）
+        member_queries = []
+        for q in idol.get("search_queries", []):
+            q_clean = q.replace(" ", "").lower()
+            is_group_name = q_clean == name.replace(" ", "").lower() or any(q_clean == g.replace(" ", "").lower() for g in group_queries)
+            if not is_group_name:
+                clean_q = q.replace(" ", "").strip()
+                if clean_q and clean_q not in member_queries:
+                    member_queries.append(clean_q)
+        
+        # --- LivePocket スクレイピング ---
         if config.ENABLE_LIVEPOCKET_SCRAPING:
             from scraper.livepocket import scrape_livepocket_events
-            for word in ticket_search_words:
-                print(f"🔍 LivePocket検索開始: {word}")
+            
+            # 1. グループ検索の実行
+            for word in group_queries:
+                print(f"🔍 LivePocketグループ検索開始: {word}")
                 try:
                     lp_events = scrape_livepocket_events(word)
                     print(f"✅ LivePocket取得件数: {len(lp_events)}件")
+                    for ev in lp_events:
+                        ev["is_member_search"] = False
+                        ev["searched_word"] = word
+                    idol_events.extend(lp_events)
+                except Exception as e:
+                    print(f"🚨 LivePocket取得中にエラー ({word}): {str(e)}")
+                    
+            # 2. メンバー検索の実行 (生誕祭・個人イベント用)
+            for word in member_queries:
+                print(f"🔍 LivePocketメンバー検索開始: {word}")
+                try:
+                    lp_events = scrape_livepocket_events(word)
+                    print(f"✅ LivePocket取得件数: {len(lp_events)}件")
+                    for ev in lp_events:
+                        ev["is_member_search"] = True
+                        ev["searched_word"] = word
                     idol_events.extend(lp_events)
                 except Exception as e:
                     print(f"🚨 LivePocket取得中にエラー ({word}): {str(e)}")
@@ -72,16 +96,56 @@ def run_marked_idols_collection() -> tuple:
                 
         total_scraped += len(idol_events)
         
-        # セッション内での重複排除
+        # セッション内での重複排除 と 取得後フィルタリング
         unique_idol_events = []
         seen_urls = set()
         for ev in idol_events:
             url = ev.get("url", "")
-            if url not in seen_urls:
-                from scraper.utils import determine_performers
-                ev["performers"] = determine_performers(ev.get("raw_text", "") + " " + ev.get("title", ""), ev.get("performers", name))
-                seen_urls.add(url)
-                unique_idol_events.append(ev)
+            if url in seen_urls:
+                continue
+                
+            # LivePocket用の取得後ノイズフィルター
+            if ev.get("source") == "LivePocket":
+                title = ev.get("title", "")
+                performers = ev.get("performers", "")
+                raw_text = ev.get("raw_text", "")
+                combined_text = (title + " " + performers + " " + raw_text).lower().replace(" ", "")
+                
+                # 対象グループ関連キーワードまたはメンバー名が含まれるか確認
+                group_kws_clean = [g.replace(" ", "").lower() for g in group_queries]
+                member_kws_clean = [m.replace(" ", "").lower() for m in member_queries]
+                all_kws_clean = group_kws_clean + member_kws_clean
+                
+                # 「レドラ」の厳密な判定用の正規表現
+                import re
+                has_redra = False
+                if "レドラ" in raw_text or "レドラ" in title:
+                    if re.search(r'(?<![ぁ-んァ-ヶ一-龠a-zA-Z0-9])レドラ(?![ぁ-んァ-ヶ一-龠a-zA-Z0-9])', raw_text + " " + title):
+                        has_redra = True
+                
+                # いずれかのキーワードが含まれているか判定
+                matched_kw = any(kw in combined_text for kw in all_kws_clean if kw != "レドラ") or has_redra
+                
+                if not matched_kw:
+                    # 関連キーワードが一切含まれていない無関係なイベントはスキップ
+                    print(f"⏭️ 関連キーワード不足のためLivePocketイベントを除外: {title}")
+                    continue
+                    
+                # メンバー検索（生誕祭など）の場合の追加フィルタ条件
+                if ev.get("is_member_search", False):
+                    # タイトルに生誕・Birthday等の文字があるか、または本文・出演者に対象グループ名があるか
+                    has_birthday_kw = any(x in title.lower() for x in ["生誕", "生誕祭", "birthday"])
+                    has_group_mention = any(g.replace(" ", "").lower() in combined_text for g in group_kws_clean)
+                    
+                    if not (has_birthday_kw or has_group_mention):
+                        # メンバー名ではヒットしたものの、生誕祭でもグループ公式イベントでもないものは除外
+                        print(f"⏭️ メンバー名検索の対象外(生誕/グループ名なし)のため除外: {title}")
+                        continue
+            
+            from scraper.utils import determine_performers
+            ev["performers"] = determine_performers(ev.get("raw_text", "") + " " + ev.get("title", ""), ev.get("performers", name))
+            seen_urls.add(url)
+            unique_idol_events.append(ev)
                 
         # データベース保存 ＆ 新着プッシュ通知
         for ev in unique_idol_events:

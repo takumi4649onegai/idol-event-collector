@@ -65,7 +65,7 @@
   - [x] `SELECT` 項目に `url` を追加し、同一URL of 自分自身を重複判定から除外
 - [x] `main.py` の重複通知判定ロジックの修正
   - [x] 新潟エリア判定による通知バイパスの廃止
-  - [x] すべての地域において `is_duplicate_by_dedupe_key()` を適用して通知を制御
+  - [x] すべて of 地域において `is_duplicate_by_dedupe_key()` を適用して通知を制御
 - [x] `scraper/livepocket.py` の修正
   - [x] 返却辞書に `"source": "LivePocket"` と `"raw_text": container_text` を追加
 - [x] `config.py` の修正
@@ -102,7 +102,7 @@
   - [x] `DATABASE_URL`, `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_GROUP_ID` のシークレット渡し設定
 - [x] 動作確認・検証
   - [x] `test_daily_summary.py` を作成し、0件時/イベントあり時の通知テキスト生成ロジックの動作検証
-  - [x] 環境変数が不足している際のエラーログハンドリング動作検証
+  - [x]環境変数が不足している際のエラーログハンドリング動作検証
   - [x] GitHub Actions ワークフローの YAML シンタックス検証
 - [x] Git コミット & プッシュ
 
@@ -110,4 +110,13 @@
 - [x] TIGET 上で Red radiance の performer ID の調査・特定
 - [x] `config.py` への `tiget_performer_id: "192837"` の追加
 - [x] ローカル環境でのテスト実行による収集動作の確認
+- [x] Git コミット & プッシュ
+
+## Phase 10: 新LivePocket対応と検索キーワード強化の完成 (完了)
+- [x] `config.py` で `livepocket_search_queries` を追加し検索キーワードを拡充
+- [x] `main.py` でグループ検索とメンバー検索（生誕祭等）を分離
+- [x] `main.py` で生誕祭等の追加フィルターおよび「レドラ」ノイズ判定用の厳密な正規表現チェックを実装
+- [x] `scraper/livepocket.py` の接続先URL・パラメータを新LivePocket（`livepocket.jp` / `word`）に移行
+- [x] `scraper/livepocket.py` でタイトルの販売ステータスプレフィックスの自動除去を実装
+- [x] 各種自動テストおよび実地スクレイピングテストを完了
 - [x] Git コミット & プッシュ

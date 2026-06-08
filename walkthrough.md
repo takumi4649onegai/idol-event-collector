@@ -1,47 +1,50 @@
-# ワークスルー: 朝まとめ通知機能の導入 (Phase 8) の実装完了
+# ワークスルー: 新LivePocket対応と検索キーワード強化の完成 (Phase 10) の実装完了
 
-タクミさんのご要望に基づき、毎朝 9:00 (JST) に今日と明日のアイドルイベント情報をまとめてLINEグループに通知する「朝まとめ通知」機能を実装しました。
-既存のクローラー処理（`main.py`）や LINE Webhook（`line_bot.py`）からは完全に独立したモジュールとして実装しているため、既存の即時通知ロジックへ影響を与えることなく、安全に導入されています。
+タクミさんのご要望に基づき、旧 LivePocket (`t.livepocket.jp`) から新 LivePocket (`livepocket.jp`) へのクローラー完全移行を行うとともに、これまで実装を進めていた検索キーワード強化、およびそれに伴うノイズ・重複を徹底的に排除する多層フィルターの統合を完了しました。
 
 ---
 
 ## 実施した変更内容
 
-### 1. 朝まとめ通知スクリプトの新規作成
-- [daily_summary.py](file:///C:/Users/takum/./.gemini/antigravity/scratch/idol-event-collector/daily_summary.py) を新規作成しました。
-- **日付計算とクエリ**: JST 時間帯で今日と明日の日付を算出し、`db_manager.query_events()` を呼び出してイベントデータを取得します。
-- **地域別集計**: 取得したイベントを「新潟」「東京」「その他」の3エリアに集計します。
-- **主なイベント表示（優先ソートと上限設定）**: 本日のイベントから新潟エリアを優先してソートし、最大5件の詳細（日付、地域、タイトル、出演者、会場、情報源）を表示します。6件以上の場合は「ほか〇件あります。」と件数を追記します。
-- **0件時対応**: 今日も明日も登録イベントがない場合でも、簡潔なフォールバック通知を構築して送信します。
-- **Windows環境対策**: ローカルデバッグ時のコンソール（cp932）文字コードエラーを防ぐため、標準出力・エラー出力を UTF-8 に再設定する防御策を施しています。
-- **LINEプッシュ通知**: `LINE_CHANNEL_ACCESS_TOKEN` および `LINE_GROUP_ID` を使って、LINEのプッシュ通知APIに1通のメッセージとして送信します。
+### 1. 新LivePocketサイトへの完全移行
+- [scraper/livepocket.py](file:///C:/Users/takum/./.gemini/antigravity/scratch/idol-event-collector/scraper/livepocket.py) を新サイト向けにアップデートしました。
+  - **巡回URL・パラメータの更新**: 接続先を新ドメイン `livepocket.jp` に、検索パラメータを `word` に変更しました。
+  - **絶対URL変換**: 新ドメインにおける `/e/XXXX` 形式の個別イベントURLを抽出し、`https://livepocket.jp/e/XXXX` として絶対URL化する処理を実装しました。
+  - **販売ステータスの除去**: イベントカードから抽出されたタイトルに「販売中」「販売前」「終了」等のステータス文字列が混在するようになったため、これを正規表現で自動的に除去して純粋なイベント名のみを取り出す処理を追加しました。
 
-### 2. GitHub Actions ワークフローの新規作成
-- [.github/workflows/daily_summary.yml](file:///C:/Users/takum/./.gemini/antigravity/scratch/idol-event-collector/.github/workflows/daily_summary.yml) を新規作成しました。
-- **実行スケジュール**: cron 設定 `0 0 * * *` を使用し、毎朝 UTC 0:00（JST 9:00）に自動起動します。
-- **手動トリガー**: `workflow_dispatch` を指定し、GitHub の Web 画面から任意のタイミングで手動起動できるように設定しました。
-- **シークレット値の受け渡し**: 実行時に GitHub Actions Secrets から `DATABASE_URL`、`LINE_CHANNEL_ACCESS_TOKEN`、`LINE_GROUP_ID` を環境変数として安全に注入します。
+### 2. 検索キーワードの拡充とグループ/メンバー検索の分離
+- [config.py](file:///C:/Users/takum/./.gemini/antigravity/scratch/idol-event-collector/config.py) に `livepocket_search_queries` リストを新設し、各グループの日本語・英語表記ゆれキーワードを設定しました。
+- [main.py](file:///C:/Users/takum/./.gemini/antigravity/scratch/idol-event-collector/main.py) にて、LivePocketの検索キーワードを「グループ名の表記ゆれ」と「メンバーの個人名」に自動で分離して順次巡回する設計としました。これにより、メンバー個人の生誕イベントなども漏れなく検知可能になりました。
+
+### 3. ノイズ排除と生誕祭用多層フィルターの追加
+- [main.py](file:///C:/Users/takum/./.gemini/antigravity/scratch/idol-event-collector/main.py) に強力な取得後フィルターを実装しました。
+  - **グループ関連フィルター**: タイトル、出演者、本文にグループの関連キーワードまたはメンバー名が含まれない無関係なイベントを自動的に除外します。
+  - **レドラ誤判定防止**: 「レドラ」という短い略称が他の単語の一部として部分一致する誤検知を防ぐため、前後が日本語/英数字ではない場合のみ採用する厳密な正規表現チェックを実装しました。
+  - **生誕祭用追加フィルター**: メンバー名での検索でヒットしたイベントについて、タイトルに「生誕/生誕祭/Birthday」が含まれるか、あるいは本文にグループの表記ゆれワードが明記されている場合のみ採用するようにし、メンバー名でのノイズイベントを完全にシャットアウトします。
+  - **同一URLの重複排除**: 複数キーワード検索によって同じURLのイベントが複数回ヒットした場合でも、セッション内およびDB主キーで1件に自動マージされます。
 
 ---
 
-## 変更・作成したファイルのまとめ
+## 変更したファイルと関数のまとめ
 
-| ファイル名 | 区分 | 変更内容 / 役割 |
+| 変更ファイル名 | 区分 | 変更内容 / 役割 |
 | :--- | :--- | :--- |
-| [daily_summary.py](file:///C:/Users/takum/./.gemini/antigravity/scratch/idol-event-collector/daily_summary.py) | **[NEW]** | 朝まとめ通知の本体スクリプト。データ取得、テキスト生成、LINE API 送信を担当。 |
-| [.github/workflows/daily_summary.yml](file:///C:/Users/takum/./.gemini/antigravity/scratch/idol-event-collector/.github/workflows/daily_summary.yml) | **[NEW]** | 朝9:00自動実行＆手動実行用の GitHub Actions ワークフロー。 |
-| [task.md](file:///C:/Users/takum/./.gemini/antigravity/scratch/idol-event-collector/task.md) | **[MODIFY]** | Phase 8 チェックリストの全項目を「完了」にアップデート。 |
-| [implementation_plan.md](file:///C:/Users/takum/./.gemini/antigravity/scratch/idol-event-collector/implementation_plan.md) | **[MODIFY]** | 朝まとめ通知の機能要件、設計方針、検証手順を記録。 |
+| [livepocket.py](file:///C:/Users/takum/./.gemini/antigravity/scratch/idol-event-collector/scraper/livepocket.py) | **[MODIFY]** | 新URL (`livepocket.jp`)、パラメータ (`word`) への変更、個別URL取得方式の調整、タイトルからの販売ステータス除去を実装。 |
+| [config.py](file:///C:/Users/takum/./.gemini/antigravity/scratch/idol-event-collector/config.py) | **[MODIFY]** | 各本命マークグループに `livepocket_search_queries` 表記ゆれリストを追加。 |
+| [main.py](file:///C:/Users/takum/./.gemini/antigravity/scratch/idol-event-collector/main.py) | **[MODIFY]** | グループ/メンバー検索の分離、生誕祭フィルター、レドラ誤検知防止、取得後ノイズフィルターの適用を実装。 |
+| [task.md](file:///C:/Users/takum/./.gemini/antigravity/scratch/idol-event-collector/task.md) | **[MODIFY]** | Phase 10 進捗チェックリストの全項目を「完了」に更新。 |
+| [implementation_plan.md](file:///C:/Users/takum/./.gemini/antigravity/scratch/idol-event-collector/implementation_plan.md) | **[MODIFY]** | 新LivePocket対応と検索キーワード強化の設計内容を反映。 |
 
 ---
 
 ## 動作確認・検証結果
 
 ### 1. 自動テスト (Unit Tests)
-- `test_daily_summary.py` を作成し、イベント0件時の表示形式、複数イベント時の新潟優先ソート、最大5件と超過時の表示、LINE トークン不足時のプレビュー動作を検証しました。
-- 全てのテスト（3/3件）に成功しています。
-- 実行コマンド: `py C:\Users\takum\.gemini\antigravity\brain\379fd0ad-b37b-4fa3-b2c6-8731c49be4cc\scratch\test_daily_summary.py`
+- `test_livepocket_filter.py` を作成し、グループ名検索での無関係イベントの除外、メンバー名検索での生誕祭イベントの採択、レドラの誤判定、キーワードの妥当性をチェックし、すべてのテストを通過しました。
+- 既存のテスト `test_livepocket_resurrection.py` もすべてのテスト（6/6）を通過し、新URLへの移行とモック検証のクリアを確認しました。
 
-### 2. ローカル実行確認
-- ローカル環境で環境変数を指定せずに `daily_summary.py` を実行し、メッセージプレビューが期待通りの文面になっていることを確認しました。
-- データベースが PostgreSQL モードおよび SQLite モードの両方でエラーなく動作し、JSTの日付の計算が正確に行われることを確認しました。
+### 2. 実地スクレイピングテスト
+- ローカル環境で実際に新 LivePocket (`livepocket.jp`) から `東京CuteCute` の検索を実行しました。
+  - **結果**: 19件のイベントの抽出に成功。
+  - タイトルから `販売前\n\n` や `販売中\n\n` などの不要なステータスプレフィックスが綺麗に除去されていることを確認（例: `【LivePocket】柴田理名 生誕祭 2026` / `【LivePocket】柚谷双葉 生誕祭 2026`）。
+  - 各個別URLが新ドメインの形式 (`https://livepocket.jp/e/XXXX`) で正しく取得されていることを確認しました。

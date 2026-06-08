@@ -6,13 +6,13 @@ import config
 
 def scrape_livepocket_events(query: str) -> list:
     """
-    LivePocket (https://t.livepocket.jp/event/search?search_word=...) から指定されたキーワードでイベント情報を検索・抽出する。
+    LivePocket (https://livepocket.jp/event/search?word=...) から指定されたキーワードでイベント情報を検索・抽出する。
     ※LivePocketはJavaScriptによる動的レンダリングを行うため、Playwrightを使用します。
     """
     if not query:
         return []
         
-    url = f"https://t.livepocket.jp/event/search?search_word={urllib.parse.quote(query)}"
+    url = f"https://livepocket.jp/event/search?word={urllib.parse.quote(query)}"
     print(f"🔍 LivePocket検索中: '{query}' ({url}) ...")
     
     html_content = ""
@@ -62,7 +62,7 @@ def scrape_livepocket_events(query: str) -> list:
     for link in event_links:
         href = link.get("href", "")
         if href.startswith("/"):
-            event_url = f"https://t.livepocket.jp{href}"
+            event_url = f"https://livepocket.jp{href}"
         else:
             event_url = href
             
@@ -91,6 +91,7 @@ def scrape_livepocket_events(query: str) -> list:
             title = headings[0] if headings else f"{query}出演イベント"
             
         title = clean_text(title)
+        title = re.sub(r'^(販売前|販売中|受付中|受付前|受付終了|終了|完売)\s*', '', title).strip()
         
         # 日付の抽出 (正規表現による日付パターンの探索)
         date_match = re.search(r'(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})|(\d{1,2}月\d{1,2}日)', container_text)
