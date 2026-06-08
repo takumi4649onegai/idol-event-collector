@@ -7,47 +7,107 @@ from datetime import datetime, timedelta
 DB_FILE = "events.db"
 
 def get_connection():
-    """SQLite データベースへのコネクションを取得"""
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row  # 列名でのアクセスを有効にする
-    return conn
+    """データベースへのコネクションを取得 (PostgreSQL or SQLite)"""
+    database_url = os.getenv("DATABASE_URL")
+    if database_url:
+        import psycopg2
+        
+        # SSL接続設定 (Neon PostgreSQL に必要)
+        if "sslmode" not in database_url:
+            if "?" in database_url:
+                conn_url = database_url + "&sslmode=require"
+            else:
+                conn_url = database_url + "?sslmode=require"
+        else:
+            conn_url = database_url
+            
+        conn = psycopg2.connect(conn_url)
+        return conn
+    else:
+        conn = sqlite3.connect(DB_FILE)
+        conn.row_factory = sqlite3.Row  # 列名でのアクセスを有効にする
+        return conn
+
+def get_cursor(conn):
+    """接続種別に応じた辞書型アクセス可能なカーソルを取得"""
+    database_url = os.getenv("DATABASE_URL")
+    if database_url:
+        from psycopg2.extras import DictCursor
+        return conn.cursor(cursor_factory=DictCursor)
+    else:
+        return conn.cursor()
 
 def init_db():
     """データベースとテーブルの初期化、及びマイグレーション"""
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = get_cursor(conn)
     
-    # イベントテーブルの作成（新規作成時は source も含む）
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS events (
-            url TEXT PRIMARY KEY,
-            title TEXT NOT NULL,
-            date TEXT NOT NULL,
-            area TEXT NOT NULL,
-            performers TEXT NOT NULL,
-            raw_text TEXT,
-            source TEXT DEFAULT 'Unknown',
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.commit()
-    
-    # 既存DBマイグレーション: source カラムが存在するかチェックし、無ければ追加する
-    try:
-        cursor.execute("PRAGMA table_info(events)")
-        columns = [row[1] for row in cursor.fetchall()]
-        if "source" not in columns:
-            print("[DB] Migrating database: adding 'source' column...")
-            cursor.execute("ALTER TABLE events ADD COLUMN source TEXT DEFAULT 'Unknown'")
-            conn.commit()
-            print("[DB] Migration completed: 'source' column added successfully.")
-        else:
-            print("[DB] Database already has 'source' column. Skip migration.")
-    except Exception as e:
-        print(f"🚨 データベース移行中にエラーが発生しました: {str(e)}")
+    database_url = os.getenv("DATABASE_URL")
+    if database_url:
+        # PostgreSQL用のテーブル作成
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS events (
+                url TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                date TEXT NOT NULL,
+                area TEXT NOT NULL,
+                performers TEXT NOT NULL,
+                raw_text TEXT,
+                source TEXT DEFAULT 'Unknown',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+        
+        # 既存DBマイグレーション (source カラム有無チェック)
+        try:
+            cursor.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'events' AND column_name = 'source'
+            """)
+            if not cursor.fetchone():
+                print("[DB] Migrating PostgreSQL: adding 'source' column...")
+                cursor.execute("ALTER TABLE events ADD COLUMN source TEXT DEFAULT 'Unknown'")
+                conn.commit()
+                print("[DB] Migration completed: 'source' column added successfully.")
+            else:
+                print("[DB] PostgreSQL database already has 'source' column. Skip migration.")
+        except Exception as e:
+            print(f"🚨 PostgreSQL 移行中にエラーが発生しました: {str(e)}")
+            conn.rollback()
+    else:
+        # SQLite用のテーブル作成
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS events (
+                url TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                date TEXT NOT NULL,
+                area TEXT NOT NULL,
+                performers TEXT NOT NULL,
+                raw_text TEXT,
+                source TEXT DEFAULT 'Unknown',
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+        
+        # 既存DBマイグレーション (source カラム有無チェック)
+        try:
+            cursor.execute("PRAGMA table_info(events)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if "source" not in columns:
+                print("[DB] Migrating SQLite: adding 'source' column...")
+                cursor.execute("ALTER TABLE events ADD COLUMN source TEXT DEFAULT 'Unknown'")
+                conn.commit()
+                print("[DB] Migration completed: 'source' column added successfully.")
+            else:
+                print("[DB] SQLite database already has 'source' column. Skip migration.")
+        except Exception as e:
+            print(f"🚨 SQLite 移行中にエラーが発生しました: {str(e)}")
         
     conn.close()
-    print("[DB] SQLite database initialized successfully.")
+    print("[DB] Database initialized successfully.")
 
 def insert_event(event: dict) -> bool:
     """
@@ -68,15 +128,24 @@ def insert_event(event: dict) -> bool:
         url = f"local_id:{performers}:{title}:{date}"
         
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = get_cursor(conn)
+    database_url = os.getenv("DATABASE_URL")
     
     try:
-        # INSERT OR IGNORE を用いて、主キー(url)の重複時は何もしない
-        cursor.execute("""
-            INSERT OR IGNORE INTO events (url, title, date, area, performers, raw_text, source)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (url, title, date, area, performers, raw_text, source))
-        
+        if database_url:
+            # PostgreSQL: ON CONFLICT を用いて主キー重複時は何もしない
+            cursor.execute("""
+                INSERT INTO events (url, title, date, area, performers, raw_text, source)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (url) DO NOTHING
+            """, (url, title, date, area, performers, raw_text, source))
+        else:
+            # SQLite: INSERT OR IGNORE を使用
+            cursor.execute("""
+                INSERT OR IGNORE INTO events (url, title, date, area, performers, raw_text, source)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (url, title, date, area, performers, raw_text, source))
+            
         conn.commit()
         
         # 実際に挿入された行数を確認
@@ -84,6 +153,8 @@ def insert_event(event: dict) -> bool:
         return inserted
     except Exception as e:
         print(f"🚨 データベース保存中にエラーが発生しました: {str(e)}")
+        if database_url:
+            conn.rollback()
         return False
     finally:
         conn.close()
@@ -95,31 +166,34 @@ def query_events(date_str: str = None, area_str: str = None, keyword: str = None
     地域は '東京', '新潟', 'その他'。
     """
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = get_cursor(conn)
+    database_url = os.getenv("DATABASE_URL")
     
     query = "SELECT * FROM events"
     params = []
     conditions = []
+    
+    placeholder = "%s" if database_url else "?"
     
     # 過去（2025年など）の古い情報を除外するため、
     # 明示的な日付指定がない場合は「昨日以降（昨日を含む）」のイベントのみを対象にする
     yesterday_str = (datetime.today() - timedelta(days=1)).strftime("%Y-%m-%d")
     
     if date_str:
-        conditions.append("date = ?")
+        conditions.append(f"date = {placeholder}")
         params.append(date_str)
     else:
         # 日付の指定がない場合は昨日以降のイベントのみを表示
-        conditions.append("date >= ?")
+        conditions.append(f"date >= {placeholder}")
         params.append(yesterday_str)
         
     if area_str:
-        conditions.append("area = ?")
+        conditions.append(f"area = {placeholder}")
         params.append(area_str)
         
     if keyword:
         # タイトルまたは出演者名に部分一致
-        conditions.append("(title LIKE ? OR performers LIKE ?)")
+        conditions.append(f"(title LIKE {placeholder} OR performers LIKE {placeholder})")
         params.append(f"%{keyword}%")
         params.append(f"%{keyword}%")
         
@@ -136,8 +210,10 @@ def query_events(date_str: str = None, area_str: str = None, keyword: str = None
         events = []
         for row in rows:
             source_val = "Unknown"
-            if "source" in row.keys():
+            try:
                 source_val = row["source"] or "Unknown"
+            except (KeyError, IndexError, sqlite3.OperationalError, Exception):
+                pass
                 
             events.append({
                 "url": row["url"],
@@ -173,13 +249,15 @@ def is_duplicate_by_dedupe_key(event: dict) -> bool:
     
     # データベースから未来（今日以降）の全イベントを取得
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = get_cursor(conn)
+    database_url = os.getenv("DATABASE_URL")
     
     today_str = datetime.today().strftime("%Y-%m-%d")
+    placeholder = "%s" if database_url else "?"
     
     try:
         # 未来のイベントを全取得して走査
-        cursor.execute("SELECT title, date, area, raw_text FROM events WHERE date >= ?", (today_str,))
+        cursor.execute(f"SELECT title, date, area, raw_text FROM events WHERE date >= {placeholder}", (today_str,))
         rows = cursor.fetchall()
         
         for row in rows:

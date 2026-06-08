@@ -39,16 +39,10 @@ jobs:
         LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
         LINE_CHANNEL_SECRET: ${{ secrets.LINE_CHANNEL_SECRET }}
         LINE_GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
         ENABLE_X_SCRAPING: 'True'
         ENABLE_TIGET_SCRAPING: 'True'
         ENABLE_LIVEPOCKET_SCRAPING: 'True'
         NITTER_BASE_URL: 'https://nitter.poast.org'
       run: |
         python main.py
-
-    - name: データベースの変更をコミットしてプッシュ
-      run: |
-        git config --local user.email "github-actions[bot]@users.noreply.github.com"
-        git config --local user.name "github-actions[bot]"
-        git add events.db
-        git diff --quiet && git diff --staged --quiet || (git commit -m "Update events database [skip ci]" && git push)
