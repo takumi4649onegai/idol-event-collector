@@ -194,6 +194,75 @@ def run_marked_idols_collection() -> tuple:
     return total_scraped, new_notified
 
 
+def run_niigata_area_collection() -> tuple:
+    """
+    新潟エリアのイベント収集 (LINE即通知なし、DB保存のみ)
+    戻り値: (検出総数, 新規保存数)
+    """
+    if not getattr(config, "ENABLE_NIIGATA_AREA_COLLECTION", False):
+        print("\n==================================================")
+        print("⏭️ 新潟地域イベント収集は無効化されています。")
+        print("==================================================")
+        return 0, 0
+        
+    print("\n==================================================")
+    print("🌾 新潟地域イベントの一般収集を開始します (通知なし)")
+    print("==================================================")
+    
+    state_id = getattr(config, "NIIGATA_TIGET_STATE_ID", 15)
+    from scraper.tiget import scrape_tiget_by_state
+    
+    try:
+        events = scrape_tiget_by_state(state_id)
+    except Exception as e:
+        print(f"🚨 新潟地域イベント取得中にエラー: {str(e)}")
+        return 0, 0
+        
+    total_scraped = len(events)
+    new_saved = 0
+    
+    # セッション内での重複排除
+    unique_events = []
+    seen_urls = set()
+    for ev in events:
+        url = ev.get("url", "")
+        if url in seen_urls:
+            continue
+        seen_urls.add(url)
+        unique_events.append(ev)
+        
+    for ev in unique_events:
+        # 過去のイベントはスキップ (JST基準)
+        today_str = datetime.now(JST).strftime("%Y-%m-%d")
+        if ev.get("date", "") < today_str:
+            print(f"⏭️ 過去イベント（保存スキップ）: {ev['title']} ({ev['date']})")
+            continue
+            
+        # 一覧ページURLは除外
+        from scraper.utils import is_generic_list_url
+        if is_generic_list_url(ev.get("url", "")):
+            print(f"⏭️ 一覧ページURLのためスキップ: {ev['title']} ({ev['url']})")
+            continue
+            
+        # エリアを強制的に "新潟" に設定
+        ev["area"] = "新潟"
+        
+        # ソースを "TIGET" に設定
+        ev["source"] = "TIGET"
+        
+        # データベース保存を試みる (重複時は False が返る)
+        is_new = db_manager.insert_event(ev)
+        source_val = ev.get("source") or "Unknown"
+        
+        if is_new:
+            print(f"✅ 新規新潟地域イベント登録: {ev['title']} ({ev['date']}) / source={source_val}")
+            new_saved += 1
+        else:
+            print(f"⏭️ 重複イベントのためスキップ: {ev['title']} ({ev['date']}) / source={source_val}")
+            
+    return total_scraped, new_saved
+
+
 def main():
     print("==================================================")
     print("🚀 女性地下アイドル対話型収集システム コレクター起動")
@@ -211,8 +280,8 @@ def main():
     # モード1: 本命マークアイドルの巡回 (通知あり)
     marked_total, marked_new = run_marked_idols_collection()
     
-    # モード2: エリア一般の巡回 (全面停止)
-    gen_total, gen_new = 0, 0
+    # 新潟地域一般イベントの巡回 (通知なし、DB保存のみ)
+    gen_total, gen_new = run_niigata_area_collection()
     
     end_time = time.time()
     duration = end_time - start_time
