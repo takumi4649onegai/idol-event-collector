@@ -62,7 +62,7 @@
 
 ## Phase 6: LivePocketスクレイパー復活と重複通知防止 (完了)
 - [x] `db_manager.py` の `is_duplicate_by_dedupe_key()` の論理バグ修正
-  - [x] `SELECT` 項目に `url` を追加し、同一URLの自分自身を重複判定から除外
+  - [x] `SELECT` 項目に `url` を追加し、同一URL of 自分自身を重複判定から除外
 - [x] `main.py` の重複通知判定ロジックの修正
   - [x] 新潟エリア判定による通知バイパスの廃止
   - [x] すべての地域において `is_duplicate_by_dedupe_key()` を適用して通知を制御
@@ -85,7 +85,7 @@
   - [x] 個別URLが取得できない場合に `local_id:TIGET:...` での一意のフォールバックID生成処理の実装
 - [x] テストコードによる動作確認
   - [x] `test_livepocket_resurrection.py` 内に `test_scrape_tiget_performer_individual_urls` テストケースを追加
-  - [x] 個別URLの正しいパース、およびlocal_idフォールバックの動作検証クリア
+  - [x] 個別URL의 正しいパース、およびlocal_idフォールバックの動作検証クリア
 - [x] Git コミット & プッシュ (Render.com へのデプロイ)
 
 ## Phase 8: 朝まとめ通知機能の導入 (完了)
@@ -104,4 +104,10 @@
   - [x] `test_daily_summary.py` を作成し、0件時/イベントあり時の通知テキスト生成ロジックの動作検証
   - [x] 環境変数が不足している際のエラーログハンドリング動作検証
   - [x] GitHub Actions ワークフローの YAML シンタックス検証
+- [x] Git コミット & プッシュ
+
+## Phase 9: Red radiance の TIGET performer ID 追加 (完了)
+- [x] TIGET 上で Red radiance の performer ID の調査・特定
+- [x] `config.py` への `tiget_performer_id: "192837"` の追加
+- [x] ローカル環境でのテスト実行による収集動作の確認
 - [x] Git コミット & プッシュ

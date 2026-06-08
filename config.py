@@ -45,7 +45,7 @@ BASE_MARKING_IDOLS = [
             "西萌葉", "西 萌葉"
         ],
         "x_id": "gce_rr",
-        "tiget_performer_id": ""
+        "tiget_performer_id": "192837"
     }
 ]
 
