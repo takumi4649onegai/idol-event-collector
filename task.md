@@ -88,3 +88,20 @@
   - [x] 個別URLの正しいパース、およびlocal_idフォールバックの動作検証クリア
 - [x] Git コミット & プッシュ (Render.com へのデプロイ)
 
+## Phase 8: 朝まとめ通知機能の導入 (完了)
+- [x] `daily_summary.py` の新規作成
+  - [x] JSTの今日・明日の日付計算処理の実装
+  - [x] `db_manager.query_events()` による今日・明日のイベントデータ取得
+  - [x] エリア別（新潟・東京・その他）件数の集計処理
+  - [x] 表示制限（最大5件）および「新潟優先」表示ロジックの実装
+  - [x] 0件時の簡潔な案内メッセージ生成処理
+  - [x] LINE_GROUP_ID へのプッシュ通知送信処理（LINE_CHANNEL_ACCESS_TOKEN 認証）
+- [x] `.github/workflows/daily_summary.yml` の新規作成
+  - [x] スケジュール（cron: JST 9:00 / UTC 0:00）の設定
+  - [x] `workflow_dispatch` (手動実行) の追加
+  - [x] `DATABASE_URL`, `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_GROUP_ID` のシークレット渡し設定
+- [x] 動作確認・検証
+  - [x] `test_daily_summary.py` を作成し、0件時/イベントあり時の通知テキスト生成ロジックの動作検証
+  - [x] 環境変数が不足している際のエラーログハンドリング動作検証
+  - [x] GitHub Actions ワークフローの YAML シンタックス検証
+- [x] Git コミット & プッシュ

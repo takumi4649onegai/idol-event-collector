@@ -1,0 +1,39 @@
+name: Daily Morning Event Summary
+
+on:
+  schedule:
+    # 毎朝日本時間 (JST) の午前 9:00 に自動実行
+    # ※標準時(UTC)では午前 0:00 のため、cron に '0 0 * * *' を指定します
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    # GitHub上のWebUIから手動でいつでも実行可能にする設定
+
+permissions:
+  contents: read
+
+jobs:
+  run-summary:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: レポジトリのチェックアウト
+      uses: actions/checkout@v3
+
+    - name: Python環境のセットアップ
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+
+    - name: 依存ライブラリのインストール
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: 朝まとめ通知の実行
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+        LINE_GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
+      run: |
+        python daily_summary.py
