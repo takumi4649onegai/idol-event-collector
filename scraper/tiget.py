@@ -172,12 +172,27 @@ def scrape_tiget_performer(performer_id: str, default_performers: str = "") -> l
             
         area = determine_area(div.get_text())
         
+        # 個別イベントURLの抽出
+        event_url = ""
+        if div.name == "a" and div.get("href") and re.search(r'/events/\d+', div.get("href")):
+            href = div.get("href")
+            event_url = "https://tiget.net" + href if href.startswith("/") else href
+        else:
+            link_el = div.find("a", href=re.compile(r'/events/\d+'))
+            if link_el:
+                href = link_el.get("href", "")
+                event_url = "https://tiget.net" + href if href.startswith("/") else href
+                
+        # フォールバック: 個別URLが取得できない場合は一意のlocal_idを生成
+        if not event_url:
+            event_url = f"local_id:TIGET:{performer_id}:{date_str}:{title}"
+            
         found_events.append({
             "date": date_str,
             "area": area,
             "title": f"【TIGET】{title}",
             "performers": performers if performers else default_performers,
-            "url": url,
+            "url": event_url,
             "raw_text": div.get_text(separator=" | "),
             "source": "TIGET"
         })

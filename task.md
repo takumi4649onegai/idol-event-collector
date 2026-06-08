@@ -78,3 +78,13 @@
   - [x] テスト結果確認（SQLiteモードおよびPostgreSQLモード）
 - [x] Git コミット & プッシュ (Render.com へのデプロイ)
 
+## Phase 7: TIGETパフォーマーページ個別URL抽出バグ修正 (完了)
+- [x] `scraper/tiget.py` の `scrape_tiget_performer()` 修正
+  - [x] 各イベントカードの `a` 要素から個別イベントの `/events/数字` の取得処理の実装
+  - [x] 相対パス時の絶対URLへの変換処理の実装
+  - [x] 個別URLが取得できない場合に `local_id:TIGET:...` での一意のフォールバックID生成処理の実装
+- [x] テストコードによる動作確認
+  - [x] `test_livepocket_resurrection.py` 内に `test_scrape_tiget_performer_individual_urls` テストケースを追加
+  - [x] 個別URLの正しいパース、およびlocal_idフォールバックの動作検証クリア
+- [x] Git コミット & プッシュ (Render.com へのデプロイ)
+
