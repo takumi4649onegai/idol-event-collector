@@ -217,11 +217,27 @@ def scrape_tiget_by_state(state_id: int) -> list:
         res = requests.get(url, headers=headers, timeout=10)
         if res.status_code == 200:
             soup = BeautifulSoup(res.text, "html.parser")
-            links = soup.find_all("a", href=re.compile(r'^/events/\d+'))
+            
+            # 各イベントカード（div.event-box）を基準にパース処理を行う
+            event_boxes = soup.find_all(class_=re.compile(r'event-box'))
             seen_urls = set()
-            for link in links:
-                href = link.get("href", "")
-                event_url = f"https://tiget.net{href}"
+            
+            for box in event_boxes:
+                # a) URLの抽出 (event-title div 内の a タグを優先)
+                title_a = None
+                title_div = box.find(class_=re.compile(r'event-title'))
+                if title_div:
+                    title_a = title_div.find("a")
+                if not title_a:
+                    title_a = box.find("a", href=re.compile(r'^/events/\d+'))
+                    
+                if not title_a:
+                    continue
+                    
+                href = title_a.get("href", "")
+                event_url = f"https://tiget.net{href}" if href.startswith("/") else href
+                
+                # 重複排除
                 if event_url in seen_urls:
                     continue
                 seen_urls.add(event_url)
@@ -230,31 +246,49 @@ def scrape_tiget_by_state(state_id: int) -> list:
                 if is_generic_list_url(event_url):
                     continue
                     
-                # カード親要素の特定
-                container = link
-                for _ in range(4):
-                    parent = container.parent
-                    if parent and parent.name in ["div", "article", "li"]:
-                        container = parent
-                        break
+                container_text = box.get_text(separator=" | ")
                 
-                container_text = container.get_text(separator=" | ")
-                
-                # タイトルの抽出
-                title = link.get_text().strip()
+                # b) タイトルの抽出
+                title = ""
+                if title_div:
+                    title = title_div.get_text().strip()
                 if not title:
-                    heading = container.find(["h2", "h3", "h4", "strong"])
-                    title = heading.get_text().strip() if heading else "無題のイベント"
+                    title = title_a.get_text().strip()
+                if not title:
+                    title = "無題のイベント"
                 title = clean_text(title)
                 
-                # 日付の抽出
-                date_match = re.search(r'(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})|(\d{1,2}月\d{1,2}日)', container_text)
-                event_date = parse_date(date_match.group(0)) if date_match else parse_date(container_text)
+                # c) 日付の抽出 (play-date div を優先)
+                date_div = box.find(class_=re.compile(r'play-date'))
+                date_text = date_div.get_text().strip() if date_div else ""
                 
-                # エリア判定
-                area = determine_area(container_text)
+                event_date = None
+                if date_text:
+                    date_clean = re.sub(r'^(開催|日程)\s*[:：]\s*', '', date_text).strip()
+                    # 複数日にまたがる場合は開始日を優先
+                    first_date_part = re.split(r'[〜~-]', date_clean)[0].strip()
+                    event_date = parse_date(first_date_part)
+                    
+                # 取得できなかった、または今日にフォールバックしてしまった場合は全体テキストから抽出
+                if not event_date or event_date == parse_date(""):
+                    date_match = re.search(r'(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})|(\d{1,2}月\d{1,2}日)', container_text)
+                    if date_match:
+                        event_date = parse_date(date_match.group(0))
+                    else:
+                        event_date = parse_date(container_text)
                 
-                # 出演者の判定 (本文からお気に入りアイドルを自動判定)
+                # d) 会場・エリア判定
+                area_div = box.find(class_=re.compile(r'event-area'))
+                area_text = area_div.get_text().strip() if area_div else ""
+                
+                area = "新潟"
+                if area_text:
+                    area_clean = re.sub(r'^(場所|会場)\s*[:：]\s*', '', area_text).strip()
+                    area = determine_area(area_clean + " " + container_text)
+                else:
+                    area = determine_area(container_text)
+                
+                # e) 出演者の判定 (本文からお気に入りアイドルを自動判定)
                 perf = determine_performers(container_text + " " + title, "")
                 
                 found_events.append({
