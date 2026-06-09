@@ -54,44 +54,7 @@ def run_select():
     conn.close()
     return len(rows)
 
-def run_delete():
-    print("Connecting to database...")
-    conn = db_manager.get_connection()
-    cursor = db_manager.get_cursor(conn)
-    
-    database_url = os.getenv("DATABASE_URL")
-    placeholder = "%s" if database_url else "?"
-    
-    # Double check count first
-    select_query = f"""
-        SELECT COUNT(*) as cnt 
-        FROM events 
-        WHERE source = {placeholder} AND area = {placeholder} AND title = {placeholder}
-    """
-    params = ("TIGET", "新潟", "【TIGET】無題のイベント")
-    cursor.execute(select_query, params)
-    cnt = cursor.fetchone()["cnt"]
-    
-    if cnt == 0:
-        print("No target records found to delete.")
-        conn.close()
-        return
-        
-    print(f"Confirming deletion of {cnt} target records...")
-    
-    delete_query = f"""
-        DELETE FROM events 
-        WHERE source = {placeholder} AND area = {placeholder} AND title = {placeholder}
-    """
-    cursor.execute(delete_query, params)
-    conn.commit()
-    print(f"Successfully deleted {cnt} records!")
-    
-    # Verify count after delete
-    cursor.execute(select_query, params)
-    verify_cnt = cursor.fetchone()["cnt"]
-    print(f"Verified count of target records after deletion: {verify_cnt}")
-    conn.close()
+# run_delete has been removed for safety
 
 def is_wrong_niigata(item: dict) -> bool:
     title = item.get("title", "") or ""
@@ -183,59 +146,7 @@ def run_select_wrong_niigata():
     conn.close()
     return len(wrong_records)
 
-def run_delete_wrong_niigata():
-    print("Connecting to database...")
-    conn = db_manager.get_connection()
-    cursor = db_manager.get_cursor(conn)
-    
-    database_url = os.getenv("DATABASE_URL")
-    placeholder = "%s" if database_url else "?"
-    
-    query = f"""
-        SELECT url, title, date, area, performers, source, raw_text
-        FROM events 
-        WHERE area = {placeholder} AND source = {placeholder}
-    """
-    params = ("新潟", "TIGET")
-    cursor.execute(query, params)
-    rows = cursor.fetchall()
-    
-    wrong_urls = []
-    for row in rows:
-        item = {
-            "url": row["url"],
-            "title": row["title"],
-            "date": row["date"],
-            "area": row["area"],
-            "performers": row["performers"],
-            "source": row["source"],
-            "raw_text": row["raw_text"] or ""
-        }
-        if is_wrong_niigata(item):
-            wrong_urls.append(row["url"])
-            
-    if not wrong_urls:
-        print("No incorrect Niigata TIGET records found to delete.")
-        conn.close()
-        return
-        
-    print(f"Confirming deletion of {len(wrong_urls)} incorrect Niigata TIGET records...")
-    
-    delete_query = f"DELETE FROM events WHERE url = {placeholder}"
-    for url in wrong_urls:
-        cursor.execute(delete_query, (url,))
-    conn.commit()
-    print(f"Successfully deleted {len(wrong_urls)} incorrect records!")
-    
-    # Verify count
-    cursor.execute(query, params)
-    verify_rows = cursor.fetchall()
-    verify_wrong_cnt = sum(1 for r in verify_rows if is_wrong_niigata({
-        "url": r["url"], "title": r["title"], "date": r["date"], "area": r["area"],
-        "performers": r["performers"], "source": r["source"], "raw_text": r["raw_text"] or ""
-    }))
-    print(f"Verified count of incorrect target records after deletion: {verify_wrong_cnt}")
-    conn.close()
+# run_delete_wrong_niigata has been removed for safety
 
 def main():
     action = os.getenv("MAINTENANCE_ACTION", "SELECT").upper()
@@ -243,14 +154,10 @@ def main():
     
     if action == "SELECT":
         run_select()
-    elif action == "DELETE":
-        run_delete()
     elif action == "SELECT_WRONG_NIIGATA":
         run_select_wrong_niigata()
-    elif action == "DELETE_WRONG_NIIGATA":
-        run_delete_wrong_niigata()
     else:
-        print(f"Unknown action: {action}")
+        print(f"Unknown action: {action} (DELETE actions have been deactivated for safety)")
         sys.exit(1)
 
 if __name__ == "__main__":
