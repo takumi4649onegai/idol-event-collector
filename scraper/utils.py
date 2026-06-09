@@ -260,7 +260,7 @@ def parse_time_and_venue(title: str, raw_text: str, default_area: str = "その�
     combined = f"{title} {raw_text or ''}"
     
     # 1. 開始時間の抽出 (例: 18:30, 19:00 など)
-    time_match = re.search(r'\b(\d{1,2}:\d{2})\b', combined)
+    time_match = re.search(r'(?<!\d)(\d{1,2}:\d{2})(?!\d)', combined)
     start_time = time_match.group(1) if time_match else "00:00"
     
     # 2. 会場名(場所)の抽出

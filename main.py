@@ -239,10 +239,47 @@ def run_marked_idols_collection() -> tuple:
                 # 重複排除チェック（新潟エリア含めすべての地域で共通実行）
                 from db_manager import is_duplicate_by_dedupe_key
                 if not is_duplicate_by_dedupe_key(ev):
-                    print(f"📩 LINE通知送信: {ev['title']} ({ev['date']}) / source={source_val}")
-                    line_client.send_line_push_notification(ev)
+                    # Googleカレンダーへの同期は常に実行
                     from calendar_client import add_to_google_calendar
                     add_to_google_calendar(ev)
+                    
+                    # 即時LINE通知を送るべきかどうかの判定
+                    should_notify = config.ENABLE_REALTIME_LINE_NOTIFICATIONS
+                    
+                    if not should_notify:
+                        # 例外条件のチェック
+                        # 1. 新潟開催
+                        if is_niigata_local:
+                            should_notify = True
+                            
+                        # 2. 今日または明日の予定 (JST基準)
+                        today_str = datetime.now(JST).strftime("%Y-%m-%d")
+                        tomorrow_str = (datetime.now(JST) + timedelta(days=1)).strftime("%Y-%m-%d")
+                        if ev.get("date", "") in [today_str, tomorrow_str]:
+                            should_notify = True
+                            
+                        # 3. 無銭LIVEっぽい予定
+                        free_keywords = ["無料", "無銭", "フリーライブ", "フリー", "観覧無料", "入場無料", "観覧フリー", "リリイベ", "インストアライブ"]
+                        combined_lower = combined_text.lower()
+                        if any(kw in combined_lower for kw in free_keywords):
+                            should_notify = True
+                            
+                        # 4. チケット発売/受付開始/先行/一般販売
+                        ticket_keywords = ["発売", "販売開始", "受付開始", "抽選", "先行", "一般販売"]
+                        if any(kw in combined_lower for kw in ticket_keywords):
+                            should_notify = True
+                            
+                        # 5. 重要イベント
+                        important_keywords = ["ワンマン", "生誕", "卒業", "解散", "デビュー", "重要"]
+                        if any(kw in combined_lower for kw in important_keywords):
+                            should_notify = True
+                            
+                    if should_notify:
+                        print(f"📩 LINE通知送信: {ev['title']} ({ev['date']}) / source={source_val}")
+                        line_client.send_line_push_notification(ev)
+                    else:
+                        print(f"⏭️ LINE通知スキップ（即時通知OFFかつ例外条件非該当）: {ev['title']} ({ev['date']})")
+                        
                     new_notified += 1
                 else:
                     print(f"🔕 重複または既存イベントのためLINE通知なし: {ev['title']} ({ev['date']}) / source={source_val}")

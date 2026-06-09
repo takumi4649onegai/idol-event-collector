@@ -377,6 +377,23 @@ def callback():
                     send_reply(reply_token, reply_text)
                     continue
                 
+                # 「今日何かある？」「今日の予定」「明日何かある？」「明日の予定」の特別ハンドリング
+                normalized_text = re.sub(r'[\s？?]', '', user_text)
+                if normalized_text in ["今日何かある", "今日の予定", "明日何かある", "明日の予定"]:
+                    if "今日" in normalized_text:
+                        target_date_str = datetime.now(JST).strftime("%Y-%m-%d")
+                        header = "🌅 今日の推し活予定"
+                    else:
+                        target_date_str = (datetime.now(JST) + timedelta(days=1)).strftime("%Y-%m-%d")
+                        header = "🌅 明日の推し活予定"
+                    
+                    print(f"💬 LINE予定まとめ質問受信: {user_text} -> 対象日付: {target_date_str}")
+                    db_events = query_events(date_str=target_date_str)
+                    from summary_formatter import format_daily_schedule
+                    reply_text = format_daily_schedule(db_events, target_date_str, header_prefix=header)
+                    send_reply(reply_token, reply_text)
+                    continue
+                
                 is_this_week = "今週" in user_text or "こんしゅう" in user_text
                 is_next_week = "来週" in user_text or "らいしゅう" in user_text
                 
