@@ -115,7 +115,8 @@ def insert_event(event: dict) -> bool:
     重複がある場合は無視（スキップ）します。
     戻り値: 新しく挿入された場合は True、重複していてスキップされた場合は False
     """
-    url = event.get("url", "")
+    from scraper.utils import normalize_event_url
+    url = normalize_event_url(event.get("url", ""))
     title = event.get("title", "")
     date = event.get("date", "")
     area = event.get("area", "その他")
@@ -126,6 +127,9 @@ def insert_event(event: dict) -> bool:
     # URLが空の場合は、重複防止のためタイトル・出演者・日付から一意なIDを生成
     if not url:
         url = f"local_id:{performers}:{title}:{date}"
+        
+    # event辞書側のurlも正規化したものにアップデートしておく
+    event["url"] = url
         
     conn = get_connection()
     cursor = get_cursor(conn)
@@ -239,6 +243,9 @@ def get_event_by_url(url: str) -> dict:
     if not url:
         return None
         
+    from scraper.utils import normalize_event_url
+    url = normalize_event_url(url)
+    
     conn = get_connection()
     cursor = get_cursor(conn)
     import os
@@ -277,10 +284,10 @@ def is_duplicate_by_dedupe_key(event: dict) -> bool:
     指定されたイベントが、【日付 ✕ 開始時間 ✕ 会場名(場所)】のキーで
     データベース側に既に存在するか（重複しているか）を判定する。
     """
-    from scraper.utils import parse_time_and_venue
+    from scraper.utils import parse_time_and_venue, normalize_event_url
     
     # 判定対象イベントのキーを生成
-    target_url = event.get("url", "")
+    target_url = normalize_event_url(event.get("url", ""))
     target_date = event.get("date", "")
     target_title = event.get("title", "")
     target_raw = event.get("raw_text", "")
@@ -308,7 +315,7 @@ def is_duplicate_by_dedupe_key(event: dict) -> bool:
         rows = cursor.fetchall()
         
         for row in rows:
-            r_url = row["url"]
+            r_url = normalize_event_url(row["url"])
             # 自分自身（同一URLのレコード）は重複排除の対象外とする
             if r_url == target_url:
                 continue

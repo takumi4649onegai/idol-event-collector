@@ -2,7 +2,7 @@ import re
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
-from scraper.utils import parse_date, determine_area, clean_text
+from scraper.utils import parse_date, determine_area, clean_text, normalize_event_url
 import config
 
 def scrape_tokyocutecute_site(base_url: str, group_name: str = "東京CuteCute") -> list:
@@ -155,7 +155,7 @@ def scrape_tokyocutecute_site(base_url: str, group_name: str = "東京CuteCute")
                         "start_time": start_time,
                         "venue": venue if venue else "未設定",
                         "performers": performers,
-                        "url": ticket_url if ticket_url else full_url,
+                        "url": normalize_event_url(ticket_url if ticket_url else full_url),
                         "area": area,
                         "raw_text": article_text[:1000],
                         "source": "TokyoCuteCute Official",

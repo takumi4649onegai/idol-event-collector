@@ -300,3 +300,19 @@ def is_generic_list_url(url: str) -> bool:
             return True
             
     return False
+
+def normalize_event_url(url: str) -> str:
+    """
+    イベントURLからクエリパラメータやフラグメント（アンカー）を削除し、一意に正規化する。
+    通常の http:// または https:// URLのみを対象とし、それ以外（local_id: など）はそのまま維持する。
+    """
+    if not url:
+        return ""
+    
+    url = url.strip()
+    if not (url.startswith("http://") or url.startswith("https://")):
+        return url
+        
+    # クエリパラメータ (?) および フラグメント (#) を削除
+    url = url.split("?")[0].split("#")[0].strip()
+    return url
