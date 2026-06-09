@@ -11,6 +11,8 @@ on:
         options:
         - SELECT
         - DELETE
+        - SELECT_WRONG_NIIGATA
+        - DELETE_WRONG_NIIGATA
 
 permissions:
   contents: read

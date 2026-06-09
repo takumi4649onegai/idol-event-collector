@@ -194,6 +194,96 @@ def run_marked_idols_collection() -> tuple:
     return total_scraped, new_notified
 
 
+def is_actual_niigata_event(ev: dict) -> bool:
+    """
+    イベントが実際に新潟で開催されるものであるかを、
+    会場情報(event-area)、タイトル、本文(raw_text)から厳密に判定する。
+    """
+    import re
+    title = ev.get("title", "") or ""
+    raw_text = ev.get("raw_text", "") or ""
+    
+    # 1. 会場・場所情報の抽出
+    venue = ""
+    venue_match = re.search(r'(?:会場|場所|place|Place|＠|@)[\s：:ー]*([^\s|｜(（【\n]+)', title + " " + raw_text)
+    if venue_match:
+        venue = venue_match.group(1).strip()
+        # 余分なテキストの切り落とし
+        venue = re.split(r'(?:出演|開場|開演|チケット|予約|主催|料金|・|\|)', venue)[0].strip()
+        venue = re.sub(r'[\(\)（）\-\[\]\{\}！!？?]', '', venue).strip()
+        
+    title_lower = title.lower()
+    raw_text_lower = raw_text.lower()
+    venue_lower = venue.lower()
+
+    # 新潟関連キーワード (新潟市、万代、柳都、主要ライブハウスや商業施設など)
+    niigata_keywords = [
+        "新潟", "新潟市", "新潟県", "nexs niigata", "nexs", "club riverst", "riverst",
+        "golden pigs", "goldenpigs", "柳都showcase", "柳都show!case!!", "柳都オレンジスタジアム",
+        "niigata lots", "新潟lots", "lots", "イオンモール新潟", "イオンモール新発田",
+        "タワーレコード新潟店", "タワレコ新潟", "ラブラ万代", "ラブラ2", "cocolo新潟", "朱鷺メッセ",
+        "万代シテイ", "万代シティ", "古町ルフル", "新潟県民会館", "りゅーとぴあ", "ジョイアミーア"
+    ]
+    
+    # 他地域除外キーワード
+    exclude_keywords = [
+        "東京", "tokyo", "京都", "kyoto", "広島", "hiroshima", "大阪", "osaka",
+        "名古屋", "nagoya", "福岡", "fukuoka", "横浜", "yokohama", "千葉", "chiba",
+        "埼玉", "saitama"
+    ]
+
+    # "場所：[住所]" のようなパターンもチェック
+    place_match = re.search(r'(?:場所|会場)[\s：:ー]*([^\s|｜\n]+)', raw_text)
+    place_text = place_match.group(1).strip() if place_match else ""
+    place_text_lower = place_text.lower()
+
+    # A. 会場・開催地に新潟のキーワードがあるか
+    is_niigata_in_venue = False
+    if venue:
+        is_niigata_in_venue = any(kw in venue_lower for kw in niigata_keywords)
+    if not is_niigata_in_venue and place_text:
+        is_niigata_in_venue = any(kw in place_text_lower for kw in niigata_keywords)
+
+    # B. 会場・開催地に他地域のキーワードがあるか
+    is_other_in_venue = False
+    if venue:
+        is_other_in_venue = any(kw in venue_lower for kw in exclude_keywords)
+    if not is_other_in_venue and place_text:
+        is_other_in_venue = any(kw in place_text_lower for kw in exclude_keywords)
+
+    # 優先順位 1: 会場・開催地に新潟がある → 保存
+    if is_niigata_in_venue:
+        return True
+
+    # 優先順位 2: 会場・開催地に明確な他県がある → 除外
+    if is_other_in_venue:
+        return False
+
+    # 優先順位 3: 会場情報が曖昧な場合 → raw_text と title を確認
+    has_niigata_in_text = any(kw in raw_text_lower or kw in title_lower for kw in niigata_keywords)
+    # タイトル内の他地域キーワードはイベント名の可能性があるので除外しない (例: TOKYO GIRLS GIRLS)
+    # そのため他地域キーワードは本文 (raw_text_lower) のみに対してチェックする
+    has_other_in_text = any(kw in raw_text_lower for kw in exclude_keywords)
+
+    if has_niigata_in_text:
+        if has_other_in_text:
+            # 本文に新潟と他地域が混在していて会場が曖昧な場合は「判定不能」とする
+            # ただし、特定の新潟会場名が明確に入っている場合は救う
+            niigata_specific = [
+                "nexs", "riverst", "golden pigs", "goldenpigs", "lots", "朱鷺メッセ", 
+                "新潟県民会館", "りゅーとぴあ", "万代", "ラブラ", "cocolo新潟"
+            ]
+            if any(kw in raw_text_lower or kw in title_lower for kw in niigata_specific):
+                return True
+            print(f"⚠️ 判定不能 (会場曖昧かつ本文に新潟・他地域併記): {title}")
+            return False
+        return True
+
+    # 優先順位 4: それでも不明 → 保存せず、ログに「判定不能」として出す
+    print(f"⚠️ 判定不能 (新潟キーワードなし): {title}")
+    return False
+
+
 def run_niigata_area_collection() -> tuple:
     """
     新潟エリアのイベント収集 (LINE即通知なし、DB保存のみ)
@@ -242,6 +332,10 @@ def run_niigata_area_collection() -> tuple:
         from scraper.utils import is_generic_list_url
         if is_generic_list_url(ev.get("url", "")):
             print(f"⏭️ 一覧ページURLのためスキップ: {ev['title']} ({ev['url']})")
+            continue
+            
+        # 新潟開催のイベントか確認し、違えば保存スキップ
+        if not is_actual_niigata_event(ev):
             continue
             
         # エリアを強制的に "新潟" に設定
