@@ -35,6 +35,10 @@ BASE_MARKING_IDOLS = [
             "東京キュートキュート",
             "キュートキュート"
         ],
+        "ticketdive_search_queries": [
+            "東京CuteCute",
+            "東京Cute Cute"
+        ],
         "x_id": "TOKYO_Cute2",
         "tiget_performer_id": "4483"
     },
@@ -63,8 +67,32 @@ BASE_MARKING_IDOLS = [
             "レッド ラディアンス",
             "レドラ"
         ],
+        "ticketdive_search_queries": [
+            "Red radiance",
+            "Red Radiance"
+        ],
         "x_id": "gce_rr",
         "tiget_performer_id": "192837"
+    },
+    {
+        "name": "ケミカル⇄リアクション",
+        "search_queries": [
+            "ケミカル⇄リアクション",
+            "ケミカルリアクション",
+            "ケミカリ"
+        ],
+        "livepocket_search_queries": [
+            "ケミカル⇄リアクション",
+            "ケミカルリアクション",
+            "ケミカリ"
+        ],
+        "ticketdive_search_queries": [
+            "ケミカリ",
+            "ケミカル⇄リアクション",
+            "ケミカルリアクション"
+        ],
+        "x_id": "",
+        "tiget_performer_id": ""
     }
 ]
 
@@ -146,7 +174,7 @@ PORT = int(os.getenv("PORT", "5000"))
 ENABLE_X_SCRAPING = False
 ENABLE_TIGET_SCRAPING = True
 ENABLE_LIVEPOCKET_SCRAPING = True
-ENABLE_TICKETDIVE_SCRAPING = False
+ENABLE_TICKETDIVE_SCRAPING = True
 ENABLE_NIIGATA_AREA_COLLECTION = True
 NIIGATA_TIGET_STATE_ID = 15
 

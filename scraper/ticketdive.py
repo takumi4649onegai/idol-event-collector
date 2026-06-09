@@ -129,112 +129,80 @@ def scrape_ticketdive_events(query: str) -> list:
     url = f"https://ticketdive.com/search?q={urllib.parse.quote(query)}"
     print(f"🔍 TicketDive検索中: '{query}' ({url}) ...")
     
-    html_content = ""
-    try:
-        from playwright.sync_api import sync_playwright
-    except ImportError:
-        print("⚠️ 警告: playwright がインストールされていないため、TicketDive のスクレイピングをスキップします。")
-        return []
-        
-    try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                viewport={"width": 1280, "height": 800}
-            )
-            page = context.new_page()
-            page.goto(url, wait_until="domcontentloaded", timeout=30000)
-            page.wait_for_timeout(3000)
-            html_content = page.content()
-            browser.close()
-    except Exception as e:
-        print(f"❌ TicketDive Playwright実行エラー: {str(e)}")
-        return []
-        
-    if not html_content:
-        return []
-        
-    soup = BeautifulSoup(html_content, "html.parser")
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "ja,en-US;q=0.9,en;q=0.8"
+    }
+    
     found_events = []
     seen_urls = set()
     
-    # 検索結果から本命アイドルの厳格な検証用
-    is_marked_idol = False
-    target_names = []
-    for idol in config.MARKING_IDOLS:
-        matches_query = (query.replace(" ", "").lower() == idol["name"].replace(" ", "").lower()) or \
-                        any(query.replace(" ", "").lower() == q.replace(" ", "").lower() for q in idol.get("search_queries", []))
-        if matches_query:
-            is_marked_idol = True
-            target_names.append(idol["name"])
-            for q in idol.get("search_queries", []):
-                target_names.append(q)
-            break
+    try:
+        res = requests.get(url, headers=headers, timeout=10)
+        if res.status_code != 200:
+            print(f"🚨 TicketDive検索結果取得失敗 (HTTP {res.status_code}): {url}")
+            return []
             
-    # /event/xxxx のリンクを探す
-    event_links = soup.find_all("a", href=re.compile(r'/event/[^?#]+'))
-    
-    for link in event_links:
-        href = link.get("href", "")
-        if href.startswith("/"):
-            event_url = f"https://ticketdive.com{href}"
-        else:
-            event_url = href
-            
-        if event_url in seen_urls:
-            continue
-        seen_urls.add(event_url)
+        soup = BeautifulSoup(res.text, "html.parser")
         
-        container_text = link.get_text(separator=" | ").strip()
-        if not container_text:
-            continue
-            
-        # タイトル、日付、エリアのパース
-        # Text: 申込受付中Color Groove2026/06/07シアターマーキュリー新宿
-        # 申込受付中 / 販売中 / 終了 などのプレフィックスを取り除く
-        clean_text_val = re.sub(r'^(申込受付中|販売中|終了|受付前|完売)', '', container_text).strip()
+        # /event/xxxx のリンクを探す
+        event_links = soup.find_all("a", href=re.compile(r'/event/[^?#]+'))
         
-        # 日付パターン (例: 2026/06/07)
-        date_match = re.search(r'(\d{4}/\d{1,2}/\d{1,2})', clean_text_val)
-        if date_match:
-            event_date = parse_date(date_match.group(0))
-            # タイトルは日付より前の部分
-            title_end = date_match.start()
-            title = clean_text_val[:title_end].strip()
-        else:
-            event_date = parse_date(clean_text_val)
-            title = clean_text_val
+        for link in event_links:
+            href = link.get("href", "")
+            if href.startswith("/"):
+                event_url = f"https://ticketdive.com{href}"
+            else:
+                event_url = href
+                
+            if event_url in seen_urls:
+                continue
+            seen_urls.add(event_url)
             
-        if not title:
-            title = f"{query}出演ライブ"
-            
-        title = clean_text(title)
-        area = determine_area(clean_text_val)
-        
-        # TicketDiveの検索結果にクエリが含まれているか厳密にチェック（偽陽性・お勧め表示対策）
-        query_clean = query.replace(" ", "").lower()
-        container_text_clean = container_text.replace(" ", "").lower()
-        title_clean = title.replace(" ", "").lower()
-        
-        if query_clean not in title_clean and query_clean not in container_text_clean:
-            # クエリがメンバー名の場合などに備え、タイトルや本文にグループ名が含まれていれば許可
-            is_group_match = False
-            for group_kw in ["東京CuteCute", "東京Cute", "Red radiance", "Redradiance"]:
-                if group_kw.replace(" ", "").lower() in title_clean or group_kw.replace(" ", "").lower() in container_text_clean:
-                    is_group_match = True
-                    break
-            
-            if not is_group_match:
+            # 各個別イベント詳細を取得してパース
+            event_data = scrape_ticketdive_event_by_url(event_url)
+            if not event_data:
                 continue
                 
-        found_events.append({
-            "date": event_date,
-            "area": area,
-            "title": f"【TicketDive】{title}",
-            "performers": query,
-            "url": event_url
-        })
+            # 出演者フィルター： performers または raw_text に対象グループ名が含まれるか判定
+            query_clean = query.lower().replace(" ", "")
+            performers_clean = event_data.get("performers", "").lower().replace(" ", "")
+            raw_text_clean = event_data.get("raw_text", "").lower().replace(" ", "")
+            title_clean = event_data.get("title", "").lower().replace(" ", "")
+            
+            # 1. クエリ自体が、タイトル・出演者・本文のいずれかに含まれているかチェック
+            matched = (query_clean in performers_clean) or (query_clean in raw_text_clean) or (query_clean in title_clean)
+            
+            # 2. もしくは、クエリに対応する本命アイドルのグループ名や検索ワードが含まれているかチェック
+            if not matched:
+                for idol in config.MARKING_IDOLS:
+                    is_target_idol = (query_clean == idol["name"].lower().replace(" ", "")) or \
+                                     any(query_clean == q.lower().replace(" ", "") for q in idol.get("search_queries", [])) or \
+                                     any(query_clean == q.lower().replace(" ", "") for q in idol.get("ticketdive_search_queries", []))
+                    if is_target_idol:
+                        group_name_clean = idol["name"].lower().replace(" ", "")
+                        if (group_name_clean in performers_clean) or (group_name_clean in raw_text_clean) or (group_name_clean in title_clean):
+                            matched = True
+                            break
+                        for q in idol.get("search_queries", []):
+                            q_clean = q.lower().replace(" ", "")
+                            if (q_clean in performers_clean) or (q_clean in raw_text_clean) or (q_clean in title_clean):
+                                matched = True
+                                break
+                        if matched:
+                            break
+                            
+            if not matched:
+                print(f"⏭️ 出演者フィルターにより除外: {event_data['title']} (出演者・本文に '{query}' 関連の記載なし)")
+                continue
+                
+            # 自動巡回での取得なので、source は TicketDive にする
+            event_data["source"] = "TicketDive"
+            
+            found_events.append(event_data)
+            
+    except Exception as e:
+        print(f"🚨 TicketDive検索エラー: {str(e)}")
         
     print(f"✅ TicketDiveから {len(found_events)} 件のイベントを抽出しました。")
     return found_events

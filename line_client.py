@@ -82,15 +82,25 @@ def send_line_push_notification(event: dict) -> bool:
         
     source_name = event.get("source") or "Unknown"
     
-    message_text = (
-        f"{header}\n"
-        f"🗓️ 日時：{display_date}{time_display}\n"
-        f"🎵 イベント名：{clean_title}\n"
-        f"📍 会場：{venue}\n"
-        f"情報源：{source_name}\n"
-        f"────────────────────"
-        f"{url_section}"
-    )
+    if source_name in ["TicketDive", "TicketDive Manual"]:
+        message_text = (
+            f"【新着イベント｜TicketDive】\n"
+            f"・タイトル：{clean_title}\n"
+            f"・日付：{display_date}{time_display}\n"
+            f"・会場：{venue}\n"
+            f"・出演：{event.get('performers', '')}\n"
+            f"・URL：{event_url or 'なし'}"
+        )
+    else:
+        message_text = (
+            f"{header}\n"
+            f"🗓️ 日時：{display_date}{time_display}\n"
+            f"🎵 イベント名：{clean_title}\n"
+            f"📍 会場：{venue}\n"
+            f"情報源：{source_name}\n"
+            f"────────────────────"
+            f"{url_section}"
+        )
     
     payload = {
         "to": group_id,

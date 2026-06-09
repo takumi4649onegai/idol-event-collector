@@ -94,6 +94,19 @@ def run_marked_idols_collection() -> tuple:
             except Exception as e:
                 print(f"🚨 TIGETパフォーマーページ取得中にエラー: {str(e)}")
                 
+        # --- TicketDive 巡回・検索スクレイピング ---
+        if config.ENABLE_TICKETDIVE_SCRAPING:
+            from scraper.ticketdive import scrape_ticketdive_events
+            td_queries = idol.get("ticketdive_search_queries", idol.get("livepocket_search_queries", [name]))
+            for word in td_queries:
+                print(f"🔍 TicketDive検索開始: {word}")
+                try:
+                    td_events = scrape_ticketdive_events(word)
+                    print(f"✅ TicketDive取得件数: {len(td_events)}件")
+                    idol_events.extend(td_events)
+                except Exception as e:
+                    print(f"🚨 TicketDive取得中にエラー ({word}): {str(e)}")
+                
         total_scraped += len(idol_events)
         
         # セッション内での重複排除 と 取得後フィルタリング
