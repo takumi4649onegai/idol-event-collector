@@ -120,3 +120,14 @@
 - [x] `scraper/livepocket.py` でタイトルの販売ステータスプレフィックスの自動除去を実装
 - [x] 各種自動テストおよび実地スクレイピングテストを完了
 - [x] Git コミット & プッシュ
+
+## Phase 11: 新潟TIGET一般収集のフィルタリング強化とDBクレンジング (進行中)
+- [x] 新潟TIGET一般収集の保存前フィルターの追加 (`main.py` の修正)
+- [x] データベースメンテナンススクリプトの dynamic placeholder 対応 (`db_maintenance.py` の修正)
+- [x] Database Maintenance ワークフローの選択肢の追加 (`.github/workflows/db_maintenance.yml` の修正)
+- [x] `SELECT_WRONG_NIIGATA` による既存DBの誤データ抽出・件数確認・バックアップJSONの作成
+- [/] ユーザーへの誤データ一覧報告と削除承認待ち (現在地)
+- [ ] (承認後) `DELETE_WRONG_NIIGATA` 実行による誤データ削除と確認
+- [ ] (承認後) `Underground Idol Event Collector` の手動実行と再保存確認
+- [ ] (承認後) テスト検証と Git コミット & プッシュ
+
