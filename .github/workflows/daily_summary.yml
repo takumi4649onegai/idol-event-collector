@@ -2,9 +2,9 @@ name: Daily Morning Event Summary
 
 on:
   schedule:
-    # 毎朝日本時間 (JST) の午前 9:00 に自動実行
-    # ※標準時(UTC)では午前 0:00 のため、cron に '0 0 * * *' を指定します
-    - cron: '0 0 * * *'
+    # 毎朝日本時間 (JST) の午前 8:00 に自動実行
+    # ※標準時(UTC)では前日 23:00 のため、cron に '0 23 * * *' を指定します
+    - cron: '0 23 * * *'
   workflow_dispatch:
     # GitHub上のWebUIから手動でいつでも実行可能にする設定
 
