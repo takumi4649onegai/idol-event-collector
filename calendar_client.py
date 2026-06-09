@@ -2,6 +2,93 @@ import json
 from datetime import datetime, timedelta
 import config
 
+def build_calendar_event_body(event: dict) -> dict:
+    """
+    Google Calendar API登録用のリソースボディを構築する。
+    """
+    date_str = event.get("date", "")
+    if not date_str:
+        return {}
+
+    summary = (
+        event.get("title", "アイドルイベント")
+        .replace("【LivePocket】", "")
+        .replace("【TIGET】", "")
+        .replace("【TicketDive】", "")
+        .replace("【X告知】", "")
+        .replace("【HP告知】", "")
+        .replace("【Web検索】", "")
+        .replace("【公式カレンダー】", "")
+        .strip()
+    )
+
+    url = event.get("url", "")
+    if url.startswith("local_id:"):
+        if "WIX_OFFICIAL" in url:
+            url_display = "なし（公式カレンダー掲載）\n🔗 公式スケジュール: https://chemicarinet.wixsite.com/official/live-schedule"
+        else:
+            url_display = "なし"
+    else:
+        url_display = url
+
+    description = f"👥 出演者: {event.get('performers', '')}\n🔗 チケットURL: {url_display}\n（Idol Event Collectorより自動同期）"
+
+    # 時間情報の取得と解析
+    start_time_str = event.get("start_time") or event.get("open_time") or ""
+    has_time = False
+    start_dt = None
+    end_dt = None
+
+    if start_time_str:
+        import re
+        time_match = re.match(r'^(\d{1,2}):(\d{2})', start_time_str.strip())
+        if time_match:
+            try:
+                hour = int(time_match.group(1))
+                minute = int(time_match.group(2))
+                dt = datetime.strptime(date_str, "%Y-%m-%d")
+                start_dt = dt.replace(hour=hour, minute=minute)
+                end_dt = start_dt + timedelta(hours=2)
+                has_time = True
+            except Exception:
+                pass
+
+    if has_time and start_dt and end_dt:
+        # dateTime形式 (JST)
+        start_iso = start_dt.strftime("%Y-%m-%dT%H:%M:%S+09:00")
+        end_iso = end_dt.strftime("%Y-%m-%dT%H:%M:%S+09:00")
+        start_payload = {
+            'dateTime': start_iso,
+            'timeZone': 'Asia/Tokyo',
+        }
+        end_payload = {
+            'dateTime': end_iso,
+            'timeZone': 'Asia/Tokyo',
+        }
+    else:
+        # 従来通りの終日予定 (date形式)
+        try:
+            dt = datetime.strptime(date_str, "%Y-%m-%d")
+            next_day_str = (dt + timedelta(days=1)).strftime("%Y-%m-%d")
+        except ValueError:
+            return {}
+        start_payload = {
+            'date': date_str,
+            'timeZone': 'Asia/Tokyo',
+        }
+        end_payload = {
+            'date': next_day_str,
+            'timeZone': 'Asia/Tokyo',
+        }
+
+    return {
+        'summary': summary,
+        'location': event.get("area", "その他"),
+        'description': description,
+        'start': start_payload,
+        'end': end_payload
+    }
+
 def add_to_google_calendar(event: dict) -> bool:
     """
     Google Calendar APIを使用して、指定されたイベントをカレンダーへ自動登録する。
@@ -23,31 +110,11 @@ def add_to_google_calendar(event: dict) -> bool:
         credentials = service_account.Credentials.from_service_account_info(service_account_info)
         service = build('calendar', 'v3', credentials=credentials)
 
-        # 終日イベントの場合、終了日は翌日の日付である必要がある
+        calendar_event = build_calendar_event_body(event)
+        if not calendar_event:
+            return False
+
         date_str = event.get("date", "")
-        if not date_str:
-            return False
-
-        try:
-            dt = datetime.strptime(date_str, "%Y-%m-%d")
-            next_day_str = (dt + timedelta(days=1)).strftime("%Y-%m-%d")
-        except ValueError:
-            return False
-
-        # カレンダーイベントの作成
-        calendar_event = {
-            'summary': event.get("title", "アイドルイベント").replace("【LivePocket】", "").replace("【TIGET】", "").replace("【TicketDive】", "").strip(),
-            'location': event.get("area", "その他"),
-            'description': f"👥 出演者: {event.get('performers', '')}\n🔗 チケットURL: {event.get('url', '')}\n（Idol Event Collectorより自動同期）",
-            'start': {
-                'date': date_str,
-                'timeZone': 'Asia/Tokyo',
-            },
-            'end': {
-                'date': next_day_str,
-                'timeZone': 'Asia/Tokyo',
-            }
-        }
 
         # 重複登録を避けるため、同一日かつ同一タイトルのイベントが既に存在するか確認する
         time_min = f"{date_str}T00:00:00Z"
@@ -181,18 +248,10 @@ def manually_sync_db_to_calendar() -> str:
         if date_str >= today_str:
             processed += 1
             try:
-                dt = datetime.strptime(date_str, "%Y-%m-%d")
-                next_day_str = (dt + timedelta(days=1)).strftime("%Y-%m-%d")
-                
-                summary = ev.get("title", "アイドルイベント").replace("【LivePocket】", "").replace("【TIGET】", "").replace("【TicketDive】", "").strip()
-                
-                calendar_event = {
-                    'summary': summary,
-                    'location': ev.get("area", "その他"),
-                    'description': f"👥 出演者: {ev.get('performers', '')}\n🔗 チケットURL: {ev.get('url', '')}\n（Idol Event Collectorより自動同期）",
-                    'start': {'date': date_str, 'timeZone': 'Asia/Tokyo'},
-                    'end': {'date': next_day_str, 'timeZone': 'Asia/Tokyo'}
-                }
+                calendar_event = build_calendar_event_body(ev)
+                if not calendar_event:
+                    failed += 1
+                    continue
                 
                 # 重複チェック
                 time_min = f"{date_str}T00:00:00Z"
@@ -201,7 +260,7 @@ def manually_sync_db_to_calendar() -> str:
                     calendarId=config.GOOGLE_CALENDAR_ID,
                     timeMin=time_min,
                     timeMax=time_max,
-                    q=summary
+                    q=calendar_event['summary']
                 ).execute()
                 
                 existing_events = events_result.get('items', [])
