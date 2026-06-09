@@ -5,12 +5,12 @@ from datetime import datetime
 from scraper.utils import parse_date, determine_area, clean_text
 import config
 
-def scrape_tokyocutecute_site() -> list:
+def scrape_tokyocutecute_site(base_url: str, group_name: str = "東京CuteCute") -> list:
     """
     東京CuteCute公式サイト (https://tokyocutecute.jp/blogs/news) の「NEWS & SCHEDULE」から
     イベント・ライブ告知情報をクロールし、 unlisted/限定公開 のチケットリンクやイベント情報を抽出する。
     """
-    url = "https://tokyocutecute.jp/blogs/news"
+    url = f"{base_url.rstrip('/')}/blogs/news"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
@@ -101,13 +101,35 @@ def scrape_tokyocutecute_site() -> list:
                             event_date = parse_date(article_text)
                             
                     # 会場のパース (■会場：渋谷DAIA 等から抽出)
-                    venue_match = re.search(r'(?:会場|場所|開催場所|ステージ)[\s：:ー〜\-]*([^\n]+)', article_text)
+                    venue_match = re.search(r'(?:会場|場所|開催場所|ステージ|place|Place|＠|@)[\s：:ー〜\-]*([^\n]+)', article_text)
                     venue = venue_match.group(1).strip() if venue_match else ""
                     if venue:
                         # 不要な余白や郵便番号の除去
                         venue = re.sub(r'〒\d+-\d+.*', '', venue).strip()
                         venue = venue.split("（")[0].split("(")[0].strip()
                         
+                    # 開場/開演時間のパース
+                    open_time = ""
+                    start_time = ""
+                    time_match = re.search(r'開場\s*(\d{1,2}:\d{2})\s*/\s*開演\s*(\d{1,2}:\d{2})', article_text)
+                    if time_match:
+                        open_time = time_match.group(1)
+                        start_time = time_match.group(2)
+                    else:
+                        open_m = re.search(r'(?:OPEN|開場)[\s：:ー]*(\d{1,2}:\d{2})', article_text, re.IGNORECASE)
+                        start_m = re.search(r'(?:START|開演)[\s：:ー]*(\d{1,2}:\d{2})', article_text, re.IGNORECASE)
+                        if open_m:
+                            open_time = open_m.group(1)
+                        if start_m:
+                            start_time = start_m.group(1)
+                            
+                    # 無料LIVE判定
+                    is_free = False
+                    for free_kw in ["観覧無料", "入場無料", "無料", "フリー"]:
+                        if free_kw in title_text or free_kw in article_text:
+                            is_free = True
+                            break
+                            
                     # タイトルの組み立て
                     display_title = title_text
                     if venue:
@@ -118,7 +140,7 @@ def scrape_tokyocutecute_site() -> list:
                     area = determine_area(venue + " " + article_text)
                     
                     # 出演者(重複検知と名寄せ)
-                    performers_list = ["東京CuteCute"]
+                    performers_list = [group_name]
                     article_lower = article_text.lower().replace(" ", "")
                     # Red Radianceが共演しているか検証
                     if "redradiance" in article_lower or "red radiance" in article_text.lower():
@@ -127,12 +149,17 @@ def scrape_tokyocutecute_site() -> list:
                     performers = ", ".join(performers_list)
                     
                     events.append({
-                        "date": event_date,
-                        "area": area,
                         "title": display_title,
+                        "date": event_date,
+                        "open_time": open_time,
+                        "start_time": start_time,
+                        "venue": venue if venue else "未設定",
                         "performers": performers,
                         "url": ticket_url if ticket_url else full_url,
-                        "raw_text": article_text[:1000]
+                        "area": area,
+                        "raw_text": article_text[:1000],
+                        "source": "TokyoCuteCute Official",
+                        "is_free": is_free
                     })
                     
             except Exception as pe:
@@ -152,9 +179,10 @@ if __name__ == "__main__":
         sys.stdout.reconfigure(encoding='utf-8')
         sys.stderr.reconfigure(encoding='utf-8')
         
-    res = scrape_tokyocutecute_site()
+    res = scrape_tokyocutecute_site("https://tokyocutecute.jp", "東京CuteCute")
     for e in res:
-        print(f"日付: {e['date']} | エリア: {e['area']} | 出演者: {e['performers']}")
+        print(f"日付: {e['date']} | 開場: {e['open_time']} | 開演: {e['start_time']} | 会場: {e['venue']} | エリア: {e['area']} | 出演者: {e['performers']}")
         print(f"タイトル: {e['title']}")
         print(f"URL: {e['url']}")
+        print(f"無料判定: {e['is_free']}")
         print("-" * 40)

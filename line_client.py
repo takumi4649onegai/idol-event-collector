@@ -91,6 +91,15 @@ def send_line_push_notification(event: dict) -> bool:
             f"・出演：{event.get('performers', '')}\n"
             f"・URL：{event_url or 'なし'}"
         )
+    elif source_name == "TokyoCuteCute Official":
+        message_text = (
+            f"【新着イベント｜公式サイト】\n"
+            f"・タイトル：{clean_title}\n"
+            f"・日付：{display_date}{time_display}\n"
+            f"・会場：{venue}\n"
+            f"・出演：{event.get('performers', '')}\n"
+            f"・URL：{event_url or 'なし'}"
+        )
     elif source_name in ["TicketDive", "TicketDive Manual"]:
         message_text = (
             f"【新着イベント｜TicketDive】\n"

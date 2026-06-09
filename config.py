@@ -40,7 +40,8 @@ BASE_MARKING_IDOLS = [
             "東京Cute Cute"
         ],
         "x_id": "TOKYO_Cute2",
-        "tiget_performer_id": "4483"
+        "tiget_performer_id": "4483",
+        "official_site_url": "https://tokyocutecute.jp/"
     },
     {
         "name": "Red radiance",
@@ -181,6 +182,7 @@ ENABLE_TIGET_SCRAPING = True
 ENABLE_LIVEPOCKET_SCRAPING = True
 ENABLE_TICKETDIVE_SCRAPING = True
 ENABLE_WIX_OFFICIAL_SCRAPING = True
+ENABLE_TOKYOCUTECUTE_OFFICIAL_SCRAPING = True
 ENABLE_NIIGATA_AREA_COLLECTION = True
 NIIGATA_TIGET_STATE_ID = 15
 

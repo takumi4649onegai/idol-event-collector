@@ -132,6 +132,18 @@ def run_marked_idols_collection() -> tuple:
             except Exception as e:
                 print(f"🚨 Wix公式カレンダー取得中にエラー ({name}): {str(e)}")
                 
+        # --- 東京CuteCute公式サイト巡回 ---
+        official_url = idol.get("official_site_url", "")
+        if config.ENABLE_TOKYOCUTECUTE_OFFICIAL_SCRAPING and official_url:
+            from scraper.tokyocutecute_official import scrape_tokyocutecute_site
+            print(f"🔍 東京CuteCute公式サイト巡回開始: {name} ({official_url})")
+            try:
+                tcc_events = scrape_tokyocutecute_site(official_url, name)
+                print(f"✅ 東京CuteCute公式サイト取得件数: {len(tcc_events)}件")
+                idol_events.extend(tcc_events)
+            except Exception as e:
+                print(f"🚨 東京CuteCute公式サイト取得中にエラー ({name}): {str(e)}")
+                
         total_scraped += len(idol_events)
         
         # セッション内での重複排除 と 取得後フィルタリング
