@@ -165,6 +165,9 @@ def search_web_keyword(keyword: str, date_str: str = None) -> list:
 
 from scraper.tiget import scrape_tiget_by_state
 
+PENDING_REGISTRATIONS = {}
+
+
 @app.route("/callback", methods=["POST"])
 def callback():
     """LINEのWebhookコールバック受付"""
@@ -205,6 +208,118 @@ def callback():
             if event.get("type") == "message" and event.get("message", {}).get("type") == "text":
                 reply_token = event.get("replyToken")
                 user_text = event.get("message", {}).get("text", "").strip()
+                
+                sender_id = event.get("source", {}).get("groupId") or event.get("source", {}).get("userId")
+                
+                # 保留中の登録候補に対する「はい」「登録」の意思確認
+                if user_text in ["はい", "登録"] and sender_id and sender_id in PENDING_REGISTRATIONS:
+                    pending_event = PENDING_REGISTRATIONS.pop(sender_id)
+                    from db_manager import insert_event
+                    success = insert_event(pending_event)
+                    
+                    if success:
+                        calendar_synced = False
+                        try:
+                            from calendar_client import add_to_google_calendar
+                            calendar_synced = add_to_google_calendar(pending_event)
+                        except Exception as ce:
+                            print(f"🚨 Googleカレンダー登録でエラーが発生しました: {ce}")
+                            
+                        date_display = pending_event['date']
+                        try:
+                            dt = datetime.strptime(pending_event['date'], "%Y-%m-%d")
+                            weeks = ["月", "火", "水", "木", "金", "土", "日"]
+                            w_str = weeks[dt.weekday()]
+                            date_display = f"{dt.strftime('%m/%d')}({w_str})"
+                        except Exception:
+                            pass
+                            
+                        reply_text = (
+                            f"✅ イベントをデータベースに登録しました！\n\n"
+                            f"・タイトル: {pending_event['title']}\n"
+                            f"・日付: {date_display}\n"
+                            f"・会場: {pending_event['venue']}\n"
+                        )
+                        if calendar_synced:
+                            reply_text += "📅 Googleカレンダーにも自動同期されました。"
+                        else:
+                            reply_text += "⚠️ Googleカレンダー同期はスキップされました（設定未完了またはエラー）。"
+                    else:
+                        reply_text = "⚠️ データベース保存に失敗したか、既に登録されています。"
+                        
+                    send_reply(reply_token, reply_text)
+                    continue
+                else:
+                    # 「はい」「登録」以外のメッセージを受信した場合は、誤動作防止のために保留中のデータをクリア
+                    if sender_id and sender_id in PENDING_REGISTRATIONS:
+                        PENDING_REGISTRATIONS.pop(sender_id, None)
+                
+                # TicketDive URL検出
+                url_match = re.search(r'(https?://)?(www\.)?(ticketdive\.com/event/[a-zA-Z0-9_-]+|t-dv\.com/[a-zA-Z0-9_-]+)', user_text)
+                if url_match:
+                    raw_url = url_match.group(0)
+                    full_url = raw_url
+                    if not raw_url.startswith("http://") and not raw_url.startswith("https://"):
+                        full_url = "https://" + raw_url
+                        
+                    from scraper.ticketdive import scrape_ticketdive_event_by_url
+                    event_data = scrape_ticketdive_event_by_url(full_url)
+                    
+                    if not event_data:
+                        send_reply(reply_token, "⚠️ TicketDive のイベント情報を取得できませんでした。URLが正しいかご確認ください。")
+                        continue
+                        
+                    from db_manager import get_event_by_url
+                    existing_event = get_event_by_url(event_data["url"])
+                    
+                    if existing_event:
+                        date_display = existing_event['date']
+                        try:
+                            dt = datetime.strptime(existing_event['date'], "%Y-%m-%d")
+                            weeks = ["月", "火", "水", "木", "金", "土", "日"]
+                            w_str = weeks[dt.weekday()]
+                            date_display = f"{dt.strftime('%m/%d')}({w_str})"
+                        except Exception:
+                            pass
+                        from scraper.utils import parse_time_and_venue
+                        _, venue = parse_time_and_venue(existing_event['title'], existing_event.get('raw_text', ''), existing_event['area'])
+                        reply_text = (
+                            f"📢 このイベントは既に登録されています。\n\n"
+                            f"・タイトル: {existing_event['title']}\n"
+                            f"・日付: {date_display}\n"
+                            f"・会場: {venue}"
+                        )
+                        send_reply(reply_token, reply_text)
+                        continue
+                        
+                    if sender_id:
+                        PENDING_REGISTRATIONS[sender_id] = event_data
+                        
+                    date_display = event_data['date']
+                    try:
+                        dt = datetime.strptime(event_data['date'], "%Y-%m-%d")
+                        weeks = ["月", "火", "水", "木", "金", "土", "日"]
+                        w_str = weeks[dt.weekday()]
+                        date_display = f"{dt.strftime('%m/%d')}({w_str})"
+                    except Exception:
+                        pass
+                        
+                    reply_text = (
+                        f"📅【TicketDive 登録候補】\n"
+                        f"登録候補のイベントが見つかりました！\n\n"
+                        f"・タイトル: {event_data['title']}\n"
+                        f"・日付: {date_display}\n"
+                        f"・開場時間: {event_data['open_time'] or '未設定'}\n"
+                        f"・開演時間: {event_data['start_time'] or '未設定'}\n"
+                        f"・会場: {event_data['venue'] or '未設定'}\n"
+                        f"・出演者: {event_data['performers'] or '未設定'}\n"
+                        f"・URL: {event_data['url']}\n"
+                        f"・情報源: {event_data['source']}\n\n"
+                        f"この内容でデータベースに登録しますか？\n"
+                        f"登録する場合は「はい」または「登録」と返信してください。"
+                    )
+                    send_reply(reply_token, reply_text)
+                    continue
                 
                 # デバッグ診断コマンド
                 if user_text.lower() in ["デバッグ", "debug", "診断", "しんだん"]:

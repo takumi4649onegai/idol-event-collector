@@ -231,6 +231,47 @@ def query_events(date_str: str = None, area_str: str = None, keyword: str = None
     finally:
         conn.close()
 
+def get_event_by_url(url: str) -> dict:
+    """
+    URLを指定してイベントを取得する。
+    重複判定用に使用します。
+    """
+    if not url:
+        return None
+        
+    conn = get_connection()
+    cursor = get_cursor(conn)
+    import os
+    database_url = os.getenv("DATABASE_URL")
+    
+    placeholder = "%s" if database_url else "?"
+    query = f"SELECT * FROM events WHERE url = {placeholder}"
+    
+    try:
+        cursor.execute(query, (url,))
+        row = cursor.fetchone()
+        if row:
+            source_val = "Unknown"
+            try:
+                source_val = row["source"] or "Unknown"
+            except Exception:
+                pass
+            return {
+                "url": row["url"],
+                "title": row["title"],
+                "date": row["date"],
+                "area": row["area"],
+                "performers": row["performers"],
+                "raw_text": row["raw_text"],
+                "source": source_val
+            }
+        return None
+    except Exception as e:
+        print(f"🚨 URLでの検索中にエラーが発生しました: {str(e)}")
+        return None
+    finally:
+        conn.close()
+
 def is_duplicate_by_dedupe_key(event: dict) -> bool:
     """
     指定されたイベントが、【日付 ✕ 開始時間 ✕ 会場名(場所)】のキーで

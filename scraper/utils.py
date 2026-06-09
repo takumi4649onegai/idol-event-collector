@@ -270,7 +270,7 @@ def parse_time_and_venue(title: str, raw_text: str, default_area: str = "その�
     if venue_match:
         venue = venue_match.group(1).strip()
         # 余分な括弧や記号を削除
-        venue = re.sub(r'[\(\)（）\-\[\]\{\}]', '', venue).strip()
+        venue = re.sub(r'[\(\)（）\-\[\]\{\}【】]', '', venue).strip()
         
     return start_time, venue
 
