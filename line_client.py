@@ -66,7 +66,7 @@ def send_line_push_notification(event: dict) -> bool:
     time_display = f" {start_time}" if start_time and start_time != "00:00" else ""
     
     # タイトルからソース表示を除去してクリーンに
-    clean_title = title.replace("【LivePocket】", "").replace("【TIGET】", "").replace("【TicketDive】", "").replace("【X告知】", "").replace("【HP告知】", "").replace("【Web検索】", "").strip()
+    clean_title = title.replace("【LivePocket】", "").replace("【TIGET】", "").replace("【TicketDive】", "").replace("【X告知】", "").replace("【HP告知】", "").replace("【Web検索】", "").replace("【公式カレンダー】", "").strip()
     
     # 新潟ローカルシグナルの検出
     combined_text = f"{title} {raw_text}"
@@ -82,7 +82,16 @@ def send_line_push_notification(event: dict) -> bool:
         
     source_name = event.get("source") or "Unknown"
     
-    if source_name in ["TicketDive", "TicketDive Manual"]:
+    if source_name == "Wix Official":
+        message_text = (
+            f"【新着イベント｜公式カレンダー】\n"
+            f"・タイトル：{clean_title}\n"
+            f"・日付：{display_date}{time_display}\n"
+            f"・会場：{venue}\n"
+            f"・出演：{event.get('performers', '')}\n"
+            f"・URL：{event_url or 'なし'}"
+        )
+    elif source_name in ["TicketDive", "TicketDive Manual"]:
         message_text = (
             f"【新着イベント｜TicketDive】\n"
             f"・タイトル：{clean_title}\n"

@@ -96,7 +96,8 @@ BASE_MARKING_IDOLS = [
         "tiget_search_queries": [
             "ケミカル⇄リアクション",
             "ケミカルリアクション"
-        ]
+        ],
+        "wix_schedule_url": "https://chemicarinet.wixsite.com/official/live-schedule"
     }
 ]
 
@@ -179,6 +180,7 @@ ENABLE_X_SCRAPING = False
 ENABLE_TIGET_SCRAPING = True
 ENABLE_LIVEPOCKET_SCRAPING = True
 ENABLE_TICKETDIVE_SCRAPING = True
+ENABLE_WIX_OFFICIAL_SCRAPING = True
 ENABLE_NIIGATA_AREA_COLLECTION = True
 NIIGATA_TIGET_STATE_ID = 15
 

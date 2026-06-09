@@ -120,6 +120,18 @@ def run_marked_idols_collection() -> tuple:
                 except Exception as e:
                     print(f"🚨 TicketDive取得中にエラー ({word}): {str(e)}")
                 
+        # --- Wix 公式カレンダー巡回 ---
+        wix_url = idol.get("wix_schedule_url", "")
+        if config.ENABLE_WIX_OFFICIAL_SCRAPING and wix_url:
+            from scraper.wix_official import scrape_wix_official_schedule
+            print(f"🔍 Wix公式カレンダー巡回開始: {name} ({wix_url})")
+            try:
+                wix_events = scrape_wix_official_schedule(wix_url, name)
+                print(f"✅ Wix公式カレンダー取得件数: {len(wix_events)}件")
+                idol_events.extend(wix_events)
+            except Exception as e:
+                print(f"🚨 Wix公式カレンダー取得中にエラー ({name}): {str(e)}")
+                
         total_scraped += len(idol_events)
         
         # セッション内での重複排除 と 取得後フィルタリング
