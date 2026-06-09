@@ -99,12 +99,24 @@ def scrape_redradiance_timetree(calendar_url: str, group_name: str = "Red Radian
                 ticket_url = ""
                 urls_in_note = re.findall(r'https?://[^\s\n\r<>"]+', note)
                 if urls_in_note:
+                    # ① 優先的にお知らせの日付 (MMDD または MM-DD) が含まれるURLを探す
+                    md_formats = [event_date.replace("-", "")[4:], event_date[5:]]
                     for link in urls_in_note:
-                        if any(k in link for k in ["livepocket.jp", "tiget.net", "ticketdive.com", "t-dv.com"]):
-                            ticket_url = link
-                            break
+                        if any(fmt in link for fmt in md_formats):
+                            # チケットサイトまたは外部URLであれば採用
+                            if not any(k in link for k in ["timetree", "timetr.ee"]):
+                                ticket_url = link
+                                break
+                    
                     if not ticket_url:
-                        # チケット購入サイト以外の外部URLをフォールバックに
+                        # ② チケット購入サイト優先で抽出
+                        for link in urls_in_note:
+                            if any(k in link for k in ["livepocket.jp", "tiget.net", "ticketdive.com", "t-dv.com"]):
+                                ticket_url = link
+                                break
+                                
+                    if not ticket_url:
+                        # ③ その他の外部URL（TimeTree以外）の最初を採用
                         external_links = [l for l in urls_in_note if "timetree" not in l and "timetr.ee" not in l]
                         if external_links:
                             ticket_url = external_links[0]

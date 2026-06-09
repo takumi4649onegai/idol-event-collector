@@ -303,8 +303,8 @@ def is_generic_list_url(url: str) -> bool:
 
 def normalize_event_url(url: str) -> str:
     """
-    イベントURLからクエリパラメータやフラグメント（アンカー）を削除し、一意に正規化する。
-    通常の http:// または https:// URLのみを対象とし、それ以外（local_id: など）はそのまま維持する。
+    イベントURLから不要なトラッキングパラメータやフラグメント（アンカー）を削除し、一意に正規化する。
+    ただし、通常の http:// または https:// URLのみを対象とし、それ以外（local_id: など）はそのまま維持する。
     """
     if not url:
         return ""
@@ -313,6 +313,31 @@ def normalize_event_url(url: str) -> str:
     if not (url.startswith("http://") or url.startswith("https://")):
         return url
         
-    # クエリパラメータ (?) および フラグメント (#) を削除
-    url = url.split("?")[0].split("#")[0].strip()
-    return url
+    # 1. フラグメント (#以降) を完全に削除
+    url_no_frag = url.split("#")[0].strip()
+    
+    # 2. クエリパラメータ (?) を解析し、トラッキングパラメータのみを除去
+    if "?" in url_no_frag:
+        base, query_str = url_no_frag.split("?", 1)
+        tracking_keys = {
+            "_gl", "utm_source", "utm_medium", "utm_campaign",
+            "utm_term", "utm_content", "fbclid", "gclid",
+            "yclid", "igshid", "xclid"
+        }
+        
+        parts = query_str.split("&")
+        new_parts = []
+        for part in parts:
+            if not part:
+                continue
+            # キー部を取得（例: name=value の name）
+            key = part.split("=")[0].strip()
+            if key.lower() not in tracking_keys:
+                new_parts.append(part)
+                
+        if new_parts:
+            return f"{base}?{'&'.join(new_parts)}"
+        else:
+            return base
+    else:
+        return url_no_frag
