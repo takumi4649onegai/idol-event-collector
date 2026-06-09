@@ -144,6 +144,18 @@ def run_marked_idols_collection() -> tuple:
             except Exception as e:
                 print(f"🚨 東京CuteCute公式サイト取得中にエラー ({name}): {str(e)}")
                 
+        # --- Red Radiance TimeTree巡回 ---
+        timetree_url = idol.get("timetree_url", "")
+        if config.ENABLE_REDRADIANCE_TIMETREE_SCRAPING and timetree_url:
+            from scraper.redradiance_timetree import scrape_redradiance_timetree
+            print(f"🔍 Red Radiance TimeTree巡回開始: {name} ({timetree_url})")
+            try:
+                tt_events = scrape_redradiance_timetree(timetree_url, name)
+                print(f"✅ Red Radiance TimeTree取得件数: {len(tt_events)}件")
+                idol_events.extend(tt_events)
+            except Exception as e:
+                print(f"🚨 Red Radiance TimeTree取得中にエラー ({name}): {str(e)}")
+                
         total_scraped += len(idol_events)
         
         # セッション内での重複排除 と 取得後フィルタリング

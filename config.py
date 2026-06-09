@@ -73,7 +73,8 @@ BASE_MARKING_IDOLS = [
             "Red Radiance"
         ],
         "x_id": "gce_rr",
-        "tiget_performer_id": "192837"
+        "tiget_performer_id": "192837",
+        "timetree_url": "https://timetreeapp.com/public_calendars/red_radiance?monthly=2026-06-11"
     },
     {
         "name": "ケミカル⇄リアクション",
@@ -183,6 +184,7 @@ ENABLE_LIVEPOCKET_SCRAPING = True
 ENABLE_TICKETDIVE_SCRAPING = True
 ENABLE_WIX_OFFICIAL_SCRAPING = True
 ENABLE_TOKYOCUTECUTE_OFFICIAL_SCRAPING = True
+ENABLE_REDRADIANCE_TIMETREE_SCRAPING = True
 ENABLE_NIIGATA_AREA_COLLECTION = True
 NIIGATA_TIGET_STATE_ID = 15
 
