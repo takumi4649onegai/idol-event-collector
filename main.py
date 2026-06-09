@@ -94,6 +94,19 @@ def run_marked_idols_collection() -> tuple:
             except Exception as e:
                 print(f"🚨 TIGETパフォーマーページ取得中にエラー: {str(e)}")
                 
+        # --- TIGET 検索巡回 (ゲスト出演・紐付け漏れ対策) ---
+        tiget_queries = idol.get("tiget_search_queries", [])
+        if config.ENABLE_TIGET_SCRAPING and tiget_queries:
+            from scraper.tiget import scrape_tiget_events
+            for word in tiget_queries:
+                print(f"🔍 TIGET検索開始: {word}")
+                try:
+                    tiget_search_evs = scrape_tiget_events(word)
+                    print(f"✅ TIGET検索取得件数: {len(tiget_search_evs)}件")
+                    idol_events.extend(tiget_search_evs)
+                except Exception as e:
+                    print(f"🚨 TIGET検索取得中にエラー ({word}): {str(e)}")
+                
         # --- TicketDive 巡回・検索スクレイピング ---
         if config.ENABLE_TICKETDIVE_SCRAPING:
             from scraper.ticketdive import scrape_ticketdive_events

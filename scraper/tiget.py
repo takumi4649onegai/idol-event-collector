@@ -1,99 +1,164 @@
 import re
 import requests
 from bs4 import BeautifulSoup
-from scraper.utils import determine_area, parse_date, clean_text
+from scraper.utils import determine_area, parse_date, clean_text, determine_performers
 import config
 
-def scrape_tiget_events(query: str) -> list:
+def scrape_tiget_event_by_url(url: str) -> dict:
     """
-    TIGET (https://tiget.net/events?q=...) から指定されたキーワードでイベント情報を検索・抽出する。
+    TIGET個別イベントページから情報を取得してパースする。
     """
-    if not query:
-        return []
-    
-    url = f"https://tiget.net/events?q={requests.utils.quote(query)}"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept-Language": "ja,en-US;q=0.9,en;q=0.8"
     }
     
-    print(f"🔍 TIGET検索中: '{query}' ({url}) ...")
+    print(f"🔍 TIGET個別イベント取得中: {url} ...")
     try:
         response = requests.get(url, headers=headers, timeout=15)
         if response.status_code != 200:
-            print(f"⚠️ TIGETアクセス失敗: HTTP {response.status_code}")
+            print(f"⚠️ TIGET個別アクセス失敗: HTTP {response.status_code}")
+            return None
+    except Exception as e:
+        print(f"❌ TIGET個別リクエストエラー: {str(e)}")
+        return None
+
+    soup = BeautifulSoup(response.text, "html.parser")
+    
+    # 1. Title
+    title_el = soup.find("h1", class_="pg-event__header__title")
+    title = title_el.get_text().strip() if title_el else ""
+    if not title:
+        page_title = soup.title.string if soup.title else ""
+        if page_title:
+            title = page_title.split("のチケット")[0].strip()
+    title = clean_text(title)
+    
+    # 2. DL metadata (Date, Venue, etc.)
+    detail_section = soup.find("section", class_="pg-event__detail")
+    raw_text = detail_section.get_text(separator=" \n ").strip() if detail_section else soup.get_text(separator=" \n ")
+    
+    event_date = ""
+    venue = ""
+    default_performers = ""
+    
+    if detail_section:
+        dls = detail_section.find_all("dl")
+        for dl in dls:
+            dt = dl.find("dt")
+            dd = dl.find("dd")
+            if dt and dd:
+                dt_text = dt.get_text().strip()
+                dd_text = dd.get_text().strip()
+                
+                if dt_text == "開催日":
+                    event_date = parse_date(dd_text)
+                elif dt_text == "会場":
+                    venue = dd_text
+                elif dt_text == "出演者":
+                    default_performers = dd_text
+
+    # 3. Fallback for Date if not found via DL
+    if not event_date:
+        date_match = re.search(r'(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})|(\d{1,2}月\d{1,2}日)', raw_text)
+        if date_match:
+            event_date = parse_date(date_match.group(0))
+        else:
+            event_date = parse_date("")
+
+    # 4. Open Time and Start Time
+    open_time = ""
+    start_time = ""
+    
+    entire_text = soup.get_text(separator=" \n ")
+    time_match = re.search(r'開場\s*(\d{1,2}:\d{2})\s*/\s*開演\s*(\d{1,2}:\d{2})', entire_text)
+    if time_match:
+        open_time = time_match.group(1)
+        start_time = time_match.group(2)
+    else:
+        open_m = re.search(r'(?:OPEN|開場)[\s：:ー]*(\d{1,2}:\d{2})', entire_text, re.IGNORECASE)
+        start_m = re.search(r'(?:START|開演)[\s：:ー]*(\d{1,2}:\d{2})', entire_text, re.IGNORECASE)
+        if open_m:
+            open_time = open_m.group(1)
+        if start_m:
+            start_time = start_m.group(1)
+
+    # 5. Area
+    area = determine_area(venue + " " + raw_text)
+    
+    # 6. Performers
+    performers = determine_performers(title + " " + raw_text, default_performers)
+    
+    return {
+        "title": f"【TIGET】{title}",
+        "date": event_date,
+        "open_time": open_time,
+        "start_time": start_time,
+        "venue": venue,
+        "performers": performers,
+        "url": url,
+        "area": area,
+        "raw_text": raw_text,
+        "source": "TIGET"
+    }
+
+def scrape_tiget_events(query: str) -> list:
+    """
+    TIGET (https://tiget.net/events?q[words]=...) から指定されたキーワードでイベント情報を検索・抽出する。
+    """
+    if not query:
+        return []
+    
+    url = "https://tiget.net/events"
+    payload = {"q[words]": query}
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "ja,en-US;q=0.9,en;q=0.8"
+    }
+    
+    print(f"🔍 TIGET検索中: '{query}' ({url} with {payload}) ...")
+    try:
+        response = requests.get(url, headers=headers, params=payload, timeout=15)
+        if response.status_code != 200:
+            print(f"⚠️ TIGET検索アクセス失敗: HTTP {response.status_code}")
             return []
     except Exception as e:
-        print(f"❌ TIGETリクエストエラー: {str(e)}")
+        print(f"❌ TIGET検索リクエストエラー: {str(e)}")
         return []
         
     soup = BeautifulSoup(response.text, "html.parser")
     found_events = []
     seen_urls = set()
     
-    # TIGETのイベントページへのリンク (例: /events/123456) を探す
     event_links = soup.find_all("a", href=re.compile(r'^/events/\d+'))
     
     for link in event_links:
         href = link.get("href", "")
-        event_url = f"https://tiget.net{href}"
+        event_url = f"https://tiget.net{href}" if href.startswith("/") else href
         
-        # 重複排除
         if event_url in seen_urls:
             continue
         seen_urls.add(event_url)
         
-        # リンクが含まれるコンテナ（親要素など）から情報を取得
-        # TIGETのレイアウト変更に耐えるため、親を遡ってテキストを解析するヘリスティック（経験則）な手法を採用
-        container = link
-        for _ in range(4): # 最大4階層上まで探索
-            parent = container.parent
-            if parent and (parent.name in ["div", "article", "li"]):
-                container = parent
-            else:
-                break
-                
-        container_text = container.get_text(separator=" | ")
-        
-        # イベントタイトルの抽出: リンクタグ自体のテキスト、またはコンテナ内の最初の太字/見出し要素
-        title = link.get_text().strip()
-        if not title:
-            # 代替としてコンテナ内の見出しなどを探す
-            heading = container.find(["h2", "h3", "h4", "strong"])
-            title = heading.get_text().strip() if heading else "無題のイベント"
+        event_data = scrape_tiget_event_by_url(event_url)
+        if not event_data:
+            continue
             
-        title = clean_text(title)
-        if title == "チケット" or title == "詳細" or not title:
-            # 汎用的な文言だった場合はより上位のテキストを探索
-            headings = [h.get_text().strip() for h in container.find_all(["h2", "h3", "h4", "strong"]) if h.get_text().strip()]
-            if headings:
-                title = headings[0]
-            else:
-                title = f"{query}出演イベント"
+        # 出演者フィルター (記号やスペースを無視して部分一致判定)
+        def normalize_filter_text(t: str) -> str:
+            return re.sub(r'[^a-zA-Z0-9\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]', '', t).lower()
+            
+        norm_query = normalize_filter_text(query)
+        norm_title = normalize_filter_text(event_data["title"])
+        norm_perf = normalize_filter_text(event_data["performers"])
+        norm_text = normalize_filter_text(event_data["raw_text"])
         
-        # 日付の抽出: コンテナのテキストから日付パターンを探す
-        # 例: 2026/05/27, 2026.05.27, 5月27日
-        date_match = re.search(r'(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})|(\d{1,2}月\d{1,2}日)', container_text)
-        if date_match:
-            event_date = parse_date(date_match.group(0))
+        if norm_query in norm_title or norm_query in norm_perf or norm_query in norm_text:
+            found_events.append(event_data)
         else:
-            event_date = parse_date(container_text) # フォールバック判定
+            print(f"⏭️ 関連キーワード不足のためTIGETイベントを除外: {event_data['title']}")
             
-        # エリア判定
-        area = determine_area(container_text)
-        
-        # クエリでの検索結果をすべて信頼して採用します (生誕祭など表記の異なるイベントを漏れなく拾うため)
-        
-        found_events.append({
-            "date": event_date,
-            "area": area,
-            "title": f"【TIGET】{title}",
-            "performers": query,
-            "url": event_url,
-            "source": "TIGET"
-        })
-        
-    print(f"✅ TIGETから {len(found_events)} 件のイベントを抽出しました。")
+    print(f"✅ TIGET検索から {len(found_events)} 件のイベントを抽出しました。")
     return found_events
 
 def scrape_tiget_performer(performer_id: str, default_performers: str = "") -> list:

@@ -92,7 +92,11 @@ BASE_MARKING_IDOLS = [
             "ケミカルリアクション"
         ],
         "x_id": "",
-        "tiget_performer_id": ""
+        "tiget_performer_id": "2579",
+        "tiget_search_queries": [
+            "ケミカル⇄リアクション",
+            "ケミカルリアクション"
+        ]
     }
 ]
 
