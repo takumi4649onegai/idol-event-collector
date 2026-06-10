@@ -385,7 +385,7 @@ def is_actual_niigata_event(ev: dict) -> bool:
 
 def run_niigata_area_collection() -> tuple:
     """
-    新潟エリアのイベント収集 (LINE即通知なし、DB保存のみ)
+    新潟エリアの一般アイドルイベント収集 (LINE即時通知・カレンダー同期あり)
     戻り値: (検出総数, 新規保存数)
     """
     if not getattr(config, "ENABLE_NIIGATA_AREA_COLLECTION", False):
@@ -395,31 +395,72 @@ def run_niigata_area_collection() -> tuple:
         return 0, 0
         
     print("\n==================================================")
-    print("🌾 新潟地域イベントの一般収集を開始します (通知なし)")
+    print("🌾 新潟地域イベントの一般収集を開始します")
     print("==================================================")
     
     state_id = getattr(config, "NIIGATA_TIGET_STATE_ID", 15)
     from scraper.tiget import scrape_tiget_by_state
     
+    general_events = []
+    
+    # 1. TIGET 県別検索 (新潟県: state_id=15)
     try:
-        events = scrape_tiget_by_state(state_id)
+        tiget_evs = scrape_tiget_by_state(state_id)
+        for ev in tiget_evs:
+            ev["source"] = "Niigata TIGET"
+        general_events.extend(tiget_evs)
     except Exception as e:
-        print(f"🚨 新潟地域イベント取得中にエラー: {str(e)}")
-        return 0, 0
+        print(f"🚨 新潟地域TIGET一般取得エラー: {str(e)}")
         
-    total_scraped = len(events)
+    # 2. LivePocket & TicketDive の新潟キーワード検索 (有効化されている場合)
+    if getattr(config, "ENABLE_NIIGATA_GENERAL_IDOL_COLLECTION", False):
+        # アクセス制限と速度低下を避けるため、主要な地域ワードに絞る
+        search_keywords = ["新潟", "万代", "古町", "柳都", "長岡"]
+        
+        # LivePocket キーワード検索
+        if config.ENABLE_LIVEPOCKET_SCRAPING:
+            from scraper.livepocket import scrape_livepocket_events
+            for kw in search_keywords:
+                try:
+                    lp_evs = scrape_livepocket_events(kw)
+                    for ev in lp_evs:
+                        ev["source"] = "Niigata LivePocket"
+                    general_events.extend(lp_evs)
+                except Exception as e:
+                    print(f"🚨 LivePocket一般検索エラー ({kw}): {e}")
+                    
+        # TicketDive キーワード検索
+        if config.ENABLE_TICKETDIVE_SCRAPING:
+            from scraper.ticketdive import scrape_ticketdive_events
+            for kw in search_keywords:
+                try:
+                    td_evs = scrape_ticketdive_events(kw)
+                    for ev in td_evs:
+                        ev["source"] = "Niigata TicketDive"
+                    general_events.extend(td_evs)
+                except Exception as e:
+                    print(f"🚨 TicketDive一般検索エラー ({kw}): {e}")
+                    
+    total_scraped = len(general_events)
     new_saved = 0
     
     # セッション内での重複排除
     unique_events = []
     seen_urls = set()
-    for ev in events:
+    from scraper.utils import normalize_event_url
+    for ev in general_events:
         url = ev.get("url", "")
-        if url in seen_urls:
+        norm_url = normalize_event_url(url)
+        ev["url"] = norm_url
+        if norm_url in seen_urls:
             continue
-        seen_urls.add(url)
+        seen_urls.add(norm_url)
         unique_events.append(ev)
         
+    # フィルタ用のキーワード定義
+    region_kws = [kw.lower() for kw in getattr(config, "NIIGATA_GENERAL_REGION_KEYWORDS", [])]
+    idol_kws = [kw.lower() for kw in getattr(config, "NIIGATA_GENERAL_IDOL_KEYWORDS", [])]
+    
     for ev in unique_events:
         # 過去のイベントはスキップ (JST基準)
         today_str = datetime.now(JST).strftime("%Y-%m-%d")
@@ -433,23 +474,57 @@ def run_niigata_area_collection() -> tuple:
             print(f"⏭️ 一覧ページURLのためスキップ: {ev['title']} ({ev['url']})")
             continue
             
-        # 新潟開催のイベントか確認し、違えば保存スキップ
-        if not is_actual_niigata_event(ev):
+        combined_text = f"{ev.get('title', '')} {ev.get('raw_text', '')}"
+        
+        # 1. 新潟開催判定
+        from scraper.utils import determine_area
+        area_determined = determine_area(combined_text)
+        is_niigata = area_determined == "新潟" or is_actual_niigata_event(ev)
+        if not is_niigata and area_determined == "その他":
+            # 補助チェック: 地域キーワードのいずれかが本文/会場に含まれるか（他地域判定されていない場合）
+            is_niigata = any(kw in combined_text.lower() for kw in region_kws)
+            
+        if not is_niigata:
+            print(f"⏭️ 新潟以外のイベントのためスキップ: {ev['title']}")
+            continue
+            
+        # 2. アイドル系イベント判定
+        is_idol = any(kw in combined_text.lower() for kw in idol_kws)
+        if not is_idol:
+            print(f"⏭️ 非アイドルイベントのためスキップ: {ev['title']}")
             continue
             
         # エリアを強制的に "新潟" に設定
         ev["area"] = "新潟"
         
-        # ソースを "TIGET" に設定
-        ev["source"] = "TIGET"
+        # 出演者の動的判定
+        from scraper.utils import determine_performers
+        ev["performers"] = determine_performers(combined_text, ev.get("performers", "新潟アイドル"))
         
         # データベース保存を試みる (重複時は False が返る)
         is_new = db_manager.insert_event(ev)
         source_val = ev.get("source") or "Unknown"
         
         if is_new:
-            print(f"✅ 新規新潟地域イベント登録: {ev['title']} ({ev['date']}) / source={source_val}")
-            new_saved += 1
+            print(f"✅ 新規新潟一般イベント登録: {ev['title']} ({ev['date']}) / source={source_val}")
+            
+            # 重複排除チェック（新潟エリア含めすべての地域で共通実行）
+            from db_manager import is_duplicate_by_dedupe_key
+            if not is_duplicate_by_dedupe_key(ev):
+                # Googleカレンダーへの同期は常に実行
+                from calendar_client import add_to_google_calendar
+                add_to_google_calendar(ev)
+                
+                # LINEプッシュ通知（新潟開催は例外即時通知対象なので常に通知）
+                print(f"📩 LINE通知送信: {ev['title']} ({ev['date']}) / source={source_val}")
+                line_client.send_line_push_notification(ev)
+                
+                new_saved += 1
+            else:
+                print(f"🔕 重複または既存イベントのためLINE通知なし: {ev['title']} ({ev['date']}) / source={source_val}")
+            
+            # APIレート制限の回避ウェイト
+            time.sleep(1.5)
         else:
             print(f"⏭️ 重複イベントのためスキップ: {ev['title']} ({ev['date']}) / source={source_val}")
             

@@ -187,7 +187,23 @@ ENABLE_TOKYOCUTECUTE_OFFICIAL_SCRAPING = True
 ENABLE_REDRADIANCE_TIMETREE_SCRAPING = True
 ENABLE_REALTIME_LINE_NOTIFICATIONS = False
 ENABLE_NIIGATA_AREA_COLLECTION = True
+ENABLE_NIIGATA_GENERAL_IDOL_COLLECTION = True
 NIIGATA_TIGET_STATE_ID = 15
+
+NIIGATA_GENERAL_REGION_KEYWORDS = [
+    "新潟", "万代", "古町", "柳都", "長岡", "亀田", "新潟駅", "ラブラ", "CoCoLo"
+]
+
+NIIGATA_GENERAL_IDOL_KEYWORDS = [
+    "アイドル", "IDOL", "idol", "ライブ", "LIVE", "対バン",
+    "ガールズ", "ローカルアイドル", "地下アイドル",
+    "特典会", "チェキ", "リリイベ", "インストア"
+]
+
+FREE_EVENT_KEYWORDS = [
+    "無料", "無銭", "観覧無料", "入場無料", "フリーライブ",
+    "フリー", "観覧フリー", "リリイベ", "インストアライブ"
+]
 
 # Nitter RSS base url
 NITTER_BASE_URL = os.getenv("NITTER_BASE_URL", "https://nitter.poast.org").rstrip("/")
