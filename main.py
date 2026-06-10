@@ -293,6 +293,96 @@ def run_marked_idols_collection() -> tuple:
     return total_scraped, new_notified
 
 
+def is_niigata_event_refined(ev: dict) -> bool:
+    """
+    新潟開催判定の強化版。人名「長岡」による誤爆を防ぎつつ、
+    会場・住所・場所行などの地域ワードから判定する。
+    """
+    import re
+    from scraper.utils import determine_area
+    
+    title = ev.get("title", "") or ""
+    raw_text = ev.get("raw_text", "") or ""
+    venue = ev.get("venue", "") or ""
+    performers = ev.get("performers", "") or ""
+    combined_text = f"{title} {raw_text}"
+    
+    # 1. determine_area による初期判定
+    area_determined = determine_area(combined_text)
+    
+    # 2. 会場・ロケーション情報の精査
+    # 出演者名によらない安全な新潟地域ワード
+    region_kws = ["新潟", "万代", "古町", "柳都", "亀田", "新潟駅", "ラブラ", "cocolo"]
+    longoka_kws = ["長岡市", "長岡駅", "長岡リリック", "長岡市内", "長岡インター", "長岡アオーレ", "アオーレ長岡"]
+    
+    has_safe_location = False
+    
+    # A. venueフィールドのチェック
+    venue_lower = venue.lower()
+    if venue_lower:
+        if any(kw in venue_lower for kw in region_kws):
+            has_safe_location = True
+        if any(kw in venue_lower for kw in longoka_kws) or "長岡" in venue_lower:
+            has_safe_location = True
+            
+    # B. タイトル内の明確な場所表現のチェック
+    title_lower = title.lower()
+    if any(tok in title_lower for tok in ["東京", "渋谷", "新宿", "池袋", "秋葉原", "大阪", "名古屋"]) and not any(kw in title_lower for kw in ["新潟駅", "万代シテイ", "古町ルフル", "新潟lots", "新潟県民会館"]):
+        # 「東京遠征」などのタイトルかつ明確な新潟会場名がない場合は除外
+        pass
+    else:
+        if any(kw in title_lower for kw in region_kws):
+            has_safe_location = True
+        if any(kw in title_lower for kw in longoka_kws):
+            has_safe_location = True
+        if "長岡" in title_lower:
+            # タイトルで地名として使われているか (市、駅、ホール、ライブ、lots等の文脈)
+            if any(w in title_lower for w in ["市", "駅", "ホール", "ライブ", "フェス", "lots", "柳都", "万代"]):
+                has_safe_location = True
+            
+    # C. 本文内の会場・住所・場所行のチェック (出演者行は除外)
+    lines = raw_text.split("\n")
+    for line in lines:
+        line_lower = line.lower().strip()
+        # 出演者名が含まれる行は場所判定からは除外
+        if any(w in line_lower for w in ["出演", "cast", "キャスト", "ゲスト", "メンバー", "出演者", "performer"]):
+            continue
+        if any(w in line_lower for w in ["会場", "場所", "place", "＠", "@", "開催地", "住所", "アクセス"]):
+            # 他地域の明示的な記載がある場合はスキップ
+            if any(tok in line_lower for tok in ["東京", "渋谷", "新宿", "池袋", "大阪", "名古屋"]):
+                continue
+            if any(kw in line_lower for kw in region_kws):
+                has_safe_location = True
+                break
+            if any(kw in line_lower for kw in longoka_kws) or "長岡" in line_lower:
+                has_safe_location = True
+                break
+
+    # 3. 判定ロジックの統合
+    # 出演者名（performers）や、出演者行に「長岡」が含まれる場合
+    # (raw_textの出演者リスト内に「長岡」がある場合を含む)
+    has_nagaoka_performer = False
+    if "長岡" in performers.lower():
+        has_nagaoka_performer = True
+    else:
+        # 本文中の出演者行に「長岡」が含まれるかチェック
+        for line in lines:
+            line_lower = line.lower().strip()
+            if any(w in line_lower for w in ["出演", "cast", "キャスト", "ゲスト", "メンバー", "出演者", "performer"]):
+                if "長岡" in line_lower:
+                    has_nagaoka_performer = True
+                    break
+
+    if has_nagaoka_performer:
+        # 「長岡」という出演者がいる場合は、determine_area や大雑把な判定は信頼せず、
+        # venue や住所行に明確な新潟の地名表現がある場合のみOKとする
+        return has_safe_location
+
+    if area_determined == "新潟":
+        return True
+        
+    return has_safe_location
+
 def is_actual_niigata_event(ev: dict) -> bool:
     """
     イベントが実際に新潟で開催されるものであるかを、
@@ -477,13 +567,7 @@ def run_niigata_area_collection() -> tuple:
         combined_text = f"{ev.get('title', '')} {ev.get('raw_text', '')}"
         
         # 1. 新潟開催判定
-        from scraper.utils import determine_area
-        area_determined = determine_area(combined_text)
-        is_niigata = area_determined == "新潟" or is_actual_niigata_event(ev)
-        if not is_niigata and area_determined == "その他":
-            # 補助チェック: 地域キーワードのいずれかが本文/会場に含まれるか（他地域判定されていない場合）
-            is_niigata = any(kw in combined_text.lower() for kw in region_kws)
-            
+        is_niigata = is_niigata_event_refined(ev)
         if not is_niigata:
             print(f"⏭️ 新潟以外のイベントのためスキップ: {ev['title']}")
             continue

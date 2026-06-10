@@ -72,7 +72,16 @@ def send_line_push_notification(event: dict) -> bool:
     combined_text = f"{title} {raw_text}"
     is_niigata_local = any(kw in combined_text for kw in ["新潟", "ガタ", "古町", "苗場"])
     
-    header = "🚨【見逃し厳禁速報】新潟ローカルシグナル検知！" if is_niigata_local else "🌟【本命マークアイドル新着情報】🌟"
+    source_name = event.get("source") or "Unknown"
+    is_niigata_general = source_name in ["Niigata General", "Niigata TIGET", "Niigata LivePocket", "Niigata TicketDive"]
+    
+    if is_niigata_general:
+        # 無料系キーワードを含むかチェック
+        free_keywords = ["無料", "無銭", "観覧無料", "入場無料", "フリーライブ", "フリー", "観覧フリー", "リリイベ", "インストアライブ"]
+        has_free = any(kw in combined_text.lower() for kw in free_keywords)
+        header = "【新潟無料イベント新着】" if has_free else "【新潟イベント新着】"
+    else:
+        header = "🚨【見逃し厳禁速報】新潟ローカルシグナル検知！" if is_niigata_local else "🌟【本命マークアイドル新着情報】🌟"
     
     # URLの生出しを禁止し、メッセージ最下部に格納する形式に変更
     url_section = ""
