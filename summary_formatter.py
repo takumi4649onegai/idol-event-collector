@@ -98,6 +98,12 @@ def format_daily_schedule(events: list, target_date_str: str, header_prefix: str
             url = ev.get("url", "")
             if url and not url.startswith("local_id:"):
                 lines.append(f"URL: {url}")
+            
+            from scraper.utils import is_niigata_general_source, generate_event_short_id
+            if is_niigata_general_source(ev.get("source")):
+                short_id = generate_event_short_id(url)
+                if short_id:
+                    lines.append(f"addcal {short_id}")
             lines.append("")
 
     # その他の予定 (本命以外)

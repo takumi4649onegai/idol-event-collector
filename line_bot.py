@@ -557,11 +557,13 @@ def callback():
                     
                     for ev in display_results:
                         date_display = ev["date"]
+                        date_full = ev["date"]
                         try:
                             dt = datetime.strptime(ev["date"], "%Y-%m-%d")
                             weeks = ["月", "火", "水", "木", "金", "土", "日"]
                             w_str = weeks[dt.weekday()]
                             date_display = f"{dt.strftime('%m/%d')}({w_str})"
+                            date_full = f"{dt.year}年{dt.month}月{dt.day}日({w_str})"
                         except Exception:
                             pass
                             
@@ -584,30 +586,44 @@ def callback():
                             links_footer.append(f"[{link_idx}] {clean_ev_title}\n🔗 {url}")
                             link_idx += 1
                             
-                        perf_part = f" (👥 {ev['performers']})" if ev['performers'] and not target_keyword else ""
+                        perf_part = ev.get("performers") or ""
                         source_val = ev.get("source") or "Unknown"
                         
+                        from scraper.utils import parse_time_and_venue
+                        start_time, venue = parse_time_and_venue(orig_title, ev.get("raw_text", "") or "", ev.get("area", ""))
+                        
+                        # 詳細ブロックの組み立て
+                        ev_lines = []
+                        ev_lines.append(f"・{date_display} | {clean_ev_title}")
+                        ev_lines.append(f"日程：{date_full}")
+                        if start_time and start_time != "00:00":
+                            ev_lines.append(f"時間：{start_time}〜")
+                        if venue:
+                            ev_lines.append(f"会場：{venue}")
+                        if perf_part:
+                            ev_lines.append(f"出演者：{perf_part}")
+                        ev_lines.append(f"情報源：{source_val}{url_part}")
+                        
                         from scraper.utils import is_niigata_general_source, generate_event_short_id
-                        addcal_part = ""
-                        if is_niigata_general_source(source_val):
+                        if is_niigata_general_source(source_val) and url:
                             short_id = generate_event_short_id(url)
                             if short_id:
-                                addcal_part = f" [addcal {short_id}]"
-                        
-                        # 行の作成
-                        event_line = f"・{date_display} | {clean_ev_title}{perf_part} (情報源: {source_val}){addcal_part}{url_part}"
+                                ev_lines.append("")
+                                ev_lines.append(f"addcal {short_id}")
+                                
+                        event_block = "\n".join(ev_lines)
                         
                         if is_ticket:
-                            ticket_list_text.append(event_line)
+                            ticket_list_text.append(event_block)
                         else:
-                            sns_list_text.append(event_line)
+                            sns_list_text.append(event_block)
                             
                     # カテゴリ別テキストの組み立て
                     events_joined_parts = []
                     if ticket_list_text:
-                        events_joined_parts.append("🎫【確定チケット販売サイト】\n" + "\n".join(ticket_list_text))
+                        events_joined_parts.append("🎫【確定チケット販売サイト】\n\n" + "\n\n".join(ticket_list_text))
                     if sns_list_text:
-                        events_joined_parts.append("📢【SNS告知・メディア出演情報】\n" + "\n".join(sns_list_text))
+                        events_joined_parts.append("📢【SNS告知・メディア出演情報】\n\n" + "\n\n".join(sns_list_text))
                         
                     events_joined = "\n\n".join(events_joined_parts).strip()
                     
