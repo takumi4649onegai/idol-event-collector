@@ -212,7 +212,7 @@ def callback():
                 sender_id = event.get("source", {}).get("groupId") or event.get("source", {}).get("userId")
                 
                 # addcal コマンドの判定
-                addcal_match = re.match(r"^addcal\s+(\S+)", user_text, re.IGNORECASE)
+                addcal_match = re.match(r"^\s*\[?\s*addcal(?:\s+|:|：|\s*:\s*|\s*：\s*)([^\]\s]+)\s*\]?\s*$", user_text, re.IGNORECASE)
                 if addcal_match:
                     target_id = addcal_match.group(1).lower()
                     print(f"💬 LINE addcal コマンド受信: target_id={target_id}")
@@ -592,7 +592,7 @@ def callback():
                         if is_niigata_general_source(source_val):
                             short_id = generate_event_short_id(url)
                             if short_id:
-                                addcal_part = f" [addcal: {short_id}]"
+                                addcal_part = f" [addcal {short_id}]"
                         
                         # 行の作成
                         event_line = f"・{date_display} | {clean_ev_title}{perf_part} (情報源: {source_val}){addcal_part}{url_part}"
