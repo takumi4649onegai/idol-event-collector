@@ -305,6 +305,75 @@ def is_niigata_event_refined(ev: dict) -> bool:
     raw_text = ev.get("raw_text", "") or ""
     venue = ev.get("venue", "") or ""
     performers = ev.get("performers", "") or ""
+    address = ev.get("address", "") or ""
+    location = ev.get("location", "") or ""
+    
+    title_lower = title.lower()
+    venue_lower = venue.lower()
+    
+    # === 新潟一般イベント他県除外ルール ===
+    # 47都道府県から新潟県を除いた46都道府県のリスト
+    other_prefectures = [
+        "北海道", "青森", "岩手", "宮城", "秋田", "山形", "福島", 
+        "茨城", "栃木", "群馬", "埼玉", "千葉", "東京", "神奈川", 
+        "富山", "石川", "福井", "山梨", "長野", "岐阜", "静岡", 
+        "愛知", "三重", "滋賀", "京都", "大阪", "兵庫", "奈良", 
+        "和歌山", "鳥取", "島根", "岡山", "広島", "山口", 
+        "徳島", "香川", "愛媛", "高知", "福岡", "佐賀", "長崎", 
+        "熊本", "大分", "宮崎", "鹿児島", "沖縄"
+    ]
+    # 他県の主要都市/スポット名（さらに除外を確実にするため）
+    other_cities = [
+        "渋谷", "新宿", "池袋", "秋葉原", "品川", "上野", "六本木", "原宿", 
+        "横浜", "川崎", "幕張", "大宮", "梅田", "難波", "心斎橋", "なんば", 
+        "名古屋", "栄", "博多", "天神"
+    ]
+    other_locations = other_prefectures + other_cities
+    
+    # 新潟の地域ワードが含まれる安全な会場情報がある場合は、他県ツアーの記載による誤除外を防ぐために除外ルールをスキップする
+    region_kws_venue = ["新潟", "万代", "古町", "柳都", "亀田", "新潟駅", "ラブラ", "lots", "アオーレ", "長岡"]
+    is_explicit_niigata_venue = any(kw in venue_lower for kw in region_kws_venue)
+    
+    if not is_explicit_niigata_venue:
+        # A. タイトル内の明確な「他県大会」「他県公演」などを検出
+        for pref in other_locations:
+            if pref in title_lower:
+                if re.search(rf"{pref}(?:県|府|都)?(?:公演|大会|ツアー|フェス|ライブ|ワンマン|gig|ギグ|シリーズ|遠征)", title_lower):
+                    print(f"⏭️ 他県タイトルパターンのため除外: {title} (検知: {pref})")
+                    return False
+                if re.search(rf"\b(?:in|at)\s*{pref}", title_lower):
+                    print(f"⏭️ 他県(in/at)表記のため除外: {title} (検知: {pref})")
+                    return False
+
+        # B. venue, address, location フィールドのチェック
+        for pref in other_locations:
+            pref_pat = rf"{pref}(?:県|府|都)?"
+            if venue and re.search(pref_pat, venue_lower):
+                print(f"⏭️ 他県会場名のため除外: {title} (会場: {venue})")
+                return False
+            if address and re.search(pref_pat, address.lower()):
+                print(f"⏭️ 他県住所のため除外: {title} (住所: {address})")
+                return False
+            if location and re.search(pref_pat, location.lower()):
+                print(f"⏭️ 他県開催地のため除外: {title} (開催地: {location})")
+                return False
+
+        # C. 本文中の場所指定行のチェック
+        lines = raw_text.split("\n")
+        for line in lines:
+            line_lower = line.lower().strip()
+            # 出演者行やキャスト行はスルー
+            if any(w in line_lower for w in ["出演", "cast", "キャスト", "ゲスト", "メンバー", "出演者", "performer"]):
+                continue
+            
+            # 場所関連キーが含まれる行
+            if any(w in line_lower for w in ["会場", "場所", "住所", "開催地", "place", "location", "address", "@", "＠"]):
+                for pref in other_locations:
+                    pref_pat = rf"{pref}(?:県|府|都)?"
+                    if re.search(pref_pat, line_lower):
+                        print(f"⏭️ 本文場所行に他県検知のため除外: {title} (行: {line_lower})")
+                        return False
+                        
     combined_text = f"{title} {raw_text}"
     
     # 1. determine_area による初期判定
