@@ -2,8 +2,8 @@ name: Niigata Event Reminder
 
 on:
   schedule:
-    # 毎日日本時間 7:00 JST (前日 22:00 UTC) と 20:00 JST (当日 11:00 UTC) に自動実行
-    - cron: '0 22 * * *'
+    # 毎日日本時間 6:00 JST (前日 21:00 UTC) と 20:00 JST (当日 11:00 UTC) に自動実行
+    - cron: '0 21 * * *'
     - cron: '0 11 * * *'
   workflow_dispatch:
     inputs:
