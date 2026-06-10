@@ -211,6 +211,79 @@ def callback():
                 
                 sender_id = event.get("source", {}).get("groupId") or event.get("source", {}).get("userId")
                 
+                # addcal コマンドの判定
+                addcal_match = re.match(r"^addcal\s+(\S+)", user_text, re.IGNORECASE)
+                if addcal_match:
+                    target_id = addcal_match.group(1).lower()
+                    print(f"💬 LINE addcal コマンド受信: target_id={target_id}")
+                    
+                    db_events = query_events(date_str=None)
+                    from scraper.utils import generate_event_short_id, is_niigata_general_source
+                    
+                    matched_events = []
+                    for ev in db_events:
+                        url = ev.get("url", "")
+                        if url:
+                            ev_id = generate_event_short_id(url)
+                            if ev_id == target_id:
+                                matched_events.append(ev)
+                                
+                    if not matched_events:
+                        reply_text = (
+                            "該当するイベントが見つかりませんでした。\n"
+                            "通知または検索結果に表示された addcal のIDを確認してください。"
+                        )
+                    elif len(matched_events) > 1:
+                        reply_text = "同じIDのイベントが複数見つかりました。イベント名を確認してください。"
+                    else:
+                        target_ev = matched_events[0]
+                        source_val = target_ev.get("source")
+                        
+                        if not is_niigata_general_source(source_val):
+                            reply_text = (
+                                "このイベントはaddcal対象外です。\n"
+                                "本命アイドル予定は通常の自動同期対象です。"
+                            )
+                        else:
+                            from calendar_client import add_to_google_calendar
+                            success = add_to_google_calendar(target_ev)
+                            
+                            if success:
+                                date_str = target_ev.get("date", "")
+                                start_time = target_ev.get("start_time") or target_ev.get("open_time") or ""
+                                
+                                from scraper.utils import parse_time_and_venue
+                                parsed_time, _ = parse_time_and_venue(target_ev.get("title", ""), target_ev.get("raw_text", "") or "", target_ev.get("area", ""))
+                                if parsed_time and parsed_time != "00:00":
+                                    time_display = f" {parsed_time}"
+                                else:
+                                    time_display = f" {start_time}" if start_time else ""
+                                
+                                date_display = date_str
+                                try:
+                                    dt = datetime.strptime(date_str, "%Y-%m-%d")
+                                    weeks = ["月", "火", "水", "木", "金", "土", "日"]
+                                    w_str = weeks[dt.weekday()]
+                                    date_display = f"{dt.strftime('%m/%d')}({w_str})"
+                                except Exception:
+                                    pass
+                                
+                                clean_title = target_ev.get("title", "")
+                                for prefix in ["【LivePocket】", "【TIGET】", "【TicketDive】", "【X告知】", "【HP告知】", "【Web検索】", "【TimeTree】", "【公式カレンダー】"]:
+                                    clean_title = clean_title.replace(prefix, "")
+                                clean_title = clean_title.strip()
+                                
+                                reply_text = (
+                                    f"Googleカレンダーに追加しました。\n\n"
+                                    f"{date_display}{time_display}\n"
+                                    f"{clean_title}"
+                                )
+                            else:
+                                reply_text = "❌ Googleカレンダーの追加に失敗しました。設定を確認してください。"
+                                
+                    send_reply(reply_token, reply_text)
+                    continue
+                
                 # 保留中の登録候補に対する「はい」「登録」の意思確認
                 if user_text in ["はい", "登録"] and sender_id and sender_id in PENDING_REGISTRATIONS:
                     pending_event = PENDING_REGISTRATIONS.pop(sender_id)
@@ -514,8 +587,15 @@ def callback():
                         perf_part = f" (👥 {ev['performers']})" if ev['performers'] and not target_keyword else ""
                         source_val = ev.get("source") or "Unknown"
                         
+                        from scraper.utils import is_niigata_general_source, generate_event_short_id
+                        addcal_part = ""
+                        if is_niigata_general_source(source_val):
+                            short_id = generate_event_short_id(url)
+                            if short_id:
+                                addcal_part = f" [addcal: {short_id}]"
+                        
                         # 行の作成
-                        event_line = f"・{date_display} | {clean_ev_title}{perf_part} (情報源: {source_val}){url_part}"
+                        event_line = f"・{date_display} | {clean_ev_title}{perf_part} (情報源: {source_val}){addcal_part}{url_part}"
                         
                         if is_ticket:
                             ticket_list_text.append(event_line)
@@ -617,6 +697,9 @@ def sync_all_db_events_to_calendar():
     sync_count = 0
     for ev in events:
         if ev.get("date", "") >= today_str:
+            from scraper.utils import is_niigata_general_source
+            if is_niigata_general_source(ev.get("source")):
+                continue
             success = add_to_google_calendar(ev)
             if success:
                 sync_count += 1

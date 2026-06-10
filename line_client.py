@@ -137,6 +137,11 @@ def send_line_push_notification(event: dict) -> bool:
             f"────────────────────"
             f"{url_section}"
         )
+        if is_niigata_general:
+            from scraper.utils import generate_event_short_id
+            short_id = generate_event_short_id(event_url)
+            if short_id:
+                message_text += f"\n\nカレンダー追加：\naddcal {short_id}"
     
     payload = {
         "to": group_id,

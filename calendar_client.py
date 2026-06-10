@@ -246,6 +246,9 @@ def manually_sync_db_to_calendar() -> str:
     for ev in events:
         date_str = ev.get("date", "")
         if date_str >= today_str:
+            from scraper.utils import is_niigata_general_source
+            if is_niigata_general_source(ev.get("source")):
+                continue
             processed += 1
             try:
                 calendar_event = build_calendar_event_body(ev)

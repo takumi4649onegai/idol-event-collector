@@ -341,3 +341,21 @@ def normalize_event_url(url: str) -> str:
             return base
     else:
         return url_no_frag
+
+def is_niigata_general_source(source: str) -> bool:
+    """
+    新潟一般イベントのソース（新潟TIGET、新潟LivePocket、新潟TicketDiveなど）であるかを判定する。
+    """
+    if not source:
+        return False
+    return source in ["Niigata General", "Niigata TIGET", "Niigata LivePocket", "Niigata TicketDive"]
+
+def generate_event_short_id(url: str) -> str:
+    """
+    イベントのURLから一意の短縮ID（8桁ハッシュ）を生成する。
+    """
+    if not url:
+        return ""
+    import hashlib
+    normalized_url = normalize_event_url(url)
+    return hashlib.sha1(normalized_url.encode("utf-8")).hexdigest()[:8]

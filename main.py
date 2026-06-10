@@ -595,9 +595,13 @@ def run_niigata_area_collection() -> tuple:
             # 重複排除チェック（新潟エリア含めすべての地域で共通実行）
             from db_manager import is_duplicate_by_dedupe_key
             if not is_duplicate_by_dedupe_key(ev):
-                # Googleカレンダーへの同期は常に実行
-                from calendar_client import add_to_google_calendar
-                add_to_google_calendar(ev)
+                # 新潟一般ソースの場合は自動同期をスキップ、それ以外は同期
+                from scraper.utils import is_niigata_general_source
+                if not is_niigata_general_source(source_val):
+                    from calendar_client import add_to_google_calendar
+                    add_to_google_calendar(ev)
+                else:
+                    print(f"⏭️ Googleカレンダー自動登録スキップ（新潟一般）: {ev['title']}")
                 
                 # LINEプッシュ通知（新潟開催は例外即時通知対象なので常に通知）
                 print(f"📩 LINE通知送信: {ev['title']} ({ev['date']}) / source={source_val}")
